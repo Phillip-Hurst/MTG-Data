@@ -1,0 +1,5 @@
+{
+  "_note": "Scrape config. Set 'format' to the MTG format you want to track (Standard, Modern, Pioneer, Legacy, etc.). Both mtg_fetch.py and fetch_mtgo.py read this file. Override per-run with --format on either script. For non-Standard formats, 'weeks_window' controls how far back the melee search goes (Standard uses set_releases.json for the set-rotation anchor instead).",
+  "format": "Standard",
+  "weeks_window": 8
+}

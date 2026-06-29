@@ -1,0 +1,10 @@
+{
+  "name": "mtg-tournament-analysis",
+  "version": "1.4.0",
+  "description": "Analyze Magic: The Gathering tournament results from melee.gg, MTGO, MTGGoldfish, and magic.gg. Surfaces meta trends, matchup data, and what changed week over week. Local-first: a guided setup script and local scrapers do the data collection, and setup seeds a per-format archetype baseline from mtgtop8 so a fresh install has a starting point.",
+  "author": {
+    "name": "Phillip Hurst",
+    "url": "https://github.com/Phillip-Hurst"
+  },
+  "keywords": ["mtg", "magic-the-gathering", "standard", "tournament", "metagame", "melee", "mtgo"]
+}

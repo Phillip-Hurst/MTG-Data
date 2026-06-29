@@ -1,0 +1,55 @@
+# Generated data — large, stale quickly, not useful to other users
+melee_*.csv
+mtgo_*.csv
+mtgo_*.json
+archetype_refs.json
+melee_deck_cache.json
+mtgo_classifications.json
+
+# Baselines — user-specific snapshots
+baselines/
+*.json.bak
+
+# Transcripts — large, personal
+transcripts/
+
+# Logs and debug output
+logs/
+*.txt
+*.log
+debug_*.html
+melee_tournaments_*.html
+melee_tournaments_*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Packaged skill output
+*.skill
+
+# Dev/probe scripts and local-only helpers (kept out of the public skill too)
+probe_page.py
+probe_melee.py
+probe_log.txt
+run_log.txt
+# Cloudflare-blocked failed experiment, never publish
+mtgdecks_fetch.py
+# hardcoded to specific tournament IDs; stays local, not shipped in the .skill
+analyze_weekend.py
+
+# Personal vault notes, analysis output, and registries — never publish these
+\[C\] *.md
+mtgo_deck_log.md
+melee_win_rate_tracker.md
+standings_only_events.json
+mtg_workspace.json
+
+# Per-format scrape workspace created by setup.py (if it lands beside the repo)
+/MTG Skill/
+/MTG Data/
