@@ -1,6 +1,6 @@
 # MTG Tournament Analysis — Cowork Skill
 
-A Cowork skill that analyzes Magic: The Gathering tournament results. Playwright scrapers run on your machine to pull round-by-round data from melee.gg and MTGO — Cowork reads what they produce. Defaults to Standard; configurable for any format.
+A Cowork skill that analyzes Magic: The Gathering tournament results. Playwright scrapers run on your machine to pull round-by-round data from melee.gg and MTGO results — Cowork reads what they produce. Defaults to Standard; configurable for any format. Set the scrapes up to run on a schedule to have the information ready for you when you want it.
 
 Ask it anything about the current meta and it gives you:
 
