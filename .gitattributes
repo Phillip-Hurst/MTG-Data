@@ -1,0 +1,14 @@
+# Line endings, settled once.
+#
+# This repo lives in OneDrive, gets edited from two machines, and is read by the
+# Cowork Linux sandbox. Windows git runs core.autocrlf=true and normalizes on
+# commit; Linux git does not. Without this file the two disagree about what
+# changed, and pure CRLF-vs-LF churn reads as modified files with identical
+# content.
+#
+# text=auto stores every text file as LF in the repository. eol=lf checks it out
+# as LF everywhere, so both gits see the same bytes on disk.
+* text=auto eol=lf
+
+# cmd.exe is happiest with CRLF in batch files, so setup.bat is the exception.
+*.bat text eol=crlf
