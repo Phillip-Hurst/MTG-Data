@@ -1,6 +1,7 @@
 {
   "note": "Add each new Standard set here when it releases. mtg_fetch.py uses the most recent release_date as the tournament search window start. Run: python mtg_fetch.py --fetch-sets to auto-update from WotC.",
   "sets": [
-    {"name": "Secrets of Strixhaven", "code": "SOT", "release_date": "2026-04-24"}
+    {"name": "Secrets of Strixhaven", "code": "SOT", "release_date": "2026-04-24"},
+    {"name": "Marvel Super Heroes", "code": "MSH", "release_date": "2026-06-26"}
   ]
 }
