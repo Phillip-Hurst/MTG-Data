@@ -9,13 +9,27 @@
     {
       "name": "mtg-data",
       "source": "./",
-      "description": "Magic: The Gathering tournament data, from the scrape through to the meta read. Two skills today: mtg-tournament-analysis reads the format (meta share, win rates, matchup matrices, card-level signal), and deck-check assigns archetype names and pushes them back into the numbers those reads are built on. Local-first: Playwright scrapers pull melee.gg and MTGO onto your own machine, and format eras keep pre-ban results out of post-ban numbers. Run setup.py once after install to build the per-format folder tree and wire up scraping.",
-      "version": "1.6.0",
+      "description": "Magic: The Gathering tournament data and gameplay review, from the scrape through to the meta read. Four skills: mtg-tournament-analysis reads the format (meta share, win rates, matchup matrices, card-level signal), deck-check assigns archetype names and pushes them back into the numbers, vod-review breaks down your own games from an untapped.gg replay, a YouTube VOD or a pasted log, and rules-check answers rules questions by quoting the current Comprehensive Rules. Local-first: Playwright scrapers pull melee.gg and MTGO onto your own machine, and format eras keep pre-ban results out of post-ban numbers. Run setup.py once after install to build the per-format folder tree and wire up scraping.",
+      "version": "1.7.0",
       "author": {
         "name": "Phillip Hurst",
         "url": "https://github.com/Phillip-Hurst"
       },
-      "keywords": ["mtg", "magic-the-gathering", "standard", "tournament", "metagame", "melee", "mtgo", "mtgtop8", "archetypes", "deck-check"]
+      "keywords": [
+        "mtg",
+        "magic-the-gathering",
+        "standard",
+        "tournament",
+        "metagame",
+        "melee",
+        "mtgo",
+        "mtgtop8",
+        "archetypes",
+        "deck-check",
+        "vod-review",
+        "rules",
+        "gameplay-review"
+      ]
     }
   ]
 }

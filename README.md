@@ -10,8 +10,14 @@ Playwright scrapers run on your machine and pull round-by-round results from mel
 |---|---|
 | `mtg-tournament-analysis` | Reads the format. Meta share, win rates, a colour-coded matchup matrix, what moved week over week, and card-level signal across the field: rogue picks, deviations from an archetype's goto build, adoption trends, and shells nobody has named yet. |
 | `deck-check` | Gets every deck under the right archetype name, and pushes that name into the CSVs the win rates and matchups are actually built from. Reads rulings you mark up in Obsidian, and keeps them across scrapes. |
+| `vod-review` | Reviews your own games from an untapped.gg replay, a YouTube VOD, or a pasted log. Finds the turn the game was actually lost, and judges the line on what you knew at the time rather than on what you drew. |
+| `rules-check` | Answers a rules question by quoting the current Comprehensive Rules with the rule number. Priority, the stack, triggers, state-based actions, layers. Never from memory. |
 
-The split is deliberate. Analysis reports the cards performing in a deck it can't name and stops there; naming it is `deck-check`'s job, and that's the step that turns those cards into an archetype with a win rate.
+The split between the first two is deliberate. Analysis reports the cards performing in a deck it can't name and stops there; naming it is `deck-check`'s job, and that's the step that turns those cards into an archetype with a win rate.
+
+The other two are what you do with a meta read. Knowing a deck wins 55% doesn't tell you why you went 2-3 with it, and `vod-review` hands every priority and timing question to `rules-check` rather than resolving it from memory.
+
+**Start at [`CLAUDE.md`](CLAUDE.md).** It's the router: which skill answers which question, how the data flows, which consumer reads which file, and the hard rules. Read it before opening a SKILL.md.
 
 **More skills will land here.** The layout is `skills/<name>/SKILL.md`, so adding one doesn't move anything else. One rule holds it together: every skill carries a `## Related skills in this plugin` table naming its siblings and when to hand off, and a test in `tests/test_event_validation.py` fails if you add a skill without updating the others.
 
@@ -188,6 +194,20 @@ python build_baseline.py --label "Week 4, post-Spotlight"
 ```
 
 Reads the standings CSV from `MTG_DATA_DIR` and appends a snapshot to `baselines/meta_baseline_<era_slug>.json`. A ban starts a new baseline file, so a week-over-week delta can't compare live decks against banned ones.
+
+## Rules lookups
+
+`rules-check` quotes the Comprehensive Rules rather than reciting them. `rules_lookup.py` finds the current dated CR text file on the WotC rules page, caches it beside the scripts, and refreshes after 14 days or when a newer one is published.
+
+```
+python rules_lookup.py 117.3b            # one rule, verbatim
+python rules_lookup.py 704               # a whole section
+python rules_lookup.py --search "split second"
+python rules_lookup.py --glossary "deathtouch"
+python rules_lookup.py --version         # what's cached, and how old
+```
+
+Stdlib only, no browser. Every result prints the CR version alongside it, because the rules are revised with every set and an answer you can't date is an answer you can't re-check.
 
 ## Archetype names are a fixed vocabulary
 

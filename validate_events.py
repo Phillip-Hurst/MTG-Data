@@ -437,6 +437,275 @@ def rewrite_combined(data_dir, fmt, verdicts, dry_run=False):
     return summary
 
 
+# ── source caches ─────────────────────────────────────────────────────────────
+#
+# The CSVs are not the only thing an analysis reads, and for a long time they
+# were the only thing this script cleaned.
+#
+# Found 2026-08-30, and it is the same shape as every other data bug here: every
+# consumer reads its own file, so cleaning one cleans one. The era split shipped
+# on 2026-08-15 and was enforced against the melee CSVs. Meanwhile
+# mtgo_classifications.json still held classifications dated 2026-06-03, both
+# MTGO dumps still carried events from 2026-08-08 and 08-09 (the era opens
+# 08-10), and melee_deck_cache.json still held 71 decks running Badgermole Cub.
+# build_refs_from_melee.py works around the dirty cache with a read-time
+# era_filter(), which is why the references came out clean and nothing looked
+# wrong. The next consumer that reads those files without its own guard inherits
+# the whole problem.
+#
+# Two different tests, because the files carry different information:
+#   - the MTGO files have a real event date, so date decides.
+#   - melee_deck_cache.json has no event date at all (open problem: discovery
+#     knows each event's date and throws it away), so cards decide, using the
+#     same judge_deck predicate the event validator and the reference builder
+#     already trust.
+
+CACHE_DATE_FILES = {
+    # file -> (entries live here, date lives here)
+    "mtgo_classifications.json": "mapping",   # {url: {..., "date": "YYYY-MM-DD"}}
+    "mtgo_challenge_latest.json": "list",     # [{"date": ..., "decks": [...]}, ...]
+    "mtgo_5-0_latest.json": "list",
+}
+
+
+def _archive_dir(data_dir, cutoff):
+    """Where removed entries go. Matches archive_era.py's layout on purpose."""
+    stamp = cutoff.strftime("%Y-%m-%d") if cutoff else "unknown"
+    return os.path.join(data_dir, "archive", f"through-{stamp}")
+
+
+def _stash(dropped, data_dir, cutoff, filename, dry_run):
+    """Park removed entries in the era archive, merging with an earlier run.
+
+    Nothing is deleted. A wrong call here should cost a file move, not a
+    rescrape, and the pre-era decks stay readable for cross-era questions.
+    """
+    if dry_run or not dropped:
+        return None
+    dest_dir = _archive_dir(data_dir, cutoff)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, filename.replace(".json", ".pre-era.json"))
+    existing = {}
+    if os.path.isfile(dest):
+        try:
+            with open(dest, encoding="utf-8") as f:
+                existing = json.load(f)
+        except (OSError, ValueError):
+            existing = {}
+    if isinstance(dropped, dict):
+        if not isinstance(existing, dict):
+            existing = {}
+        existing.update(dropped)
+        merged = existing
+    else:
+        merged = (existing if isinstance(existing, list) else []) + list(dropped)
+    with open(dest, "w", encoding="utf-8") as f:
+        json.dump(merged, f, indent=1, ensure_ascii=False)
+    return dest
+
+
+def _load_json(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError) as exc:
+        UNREADABLE.append((os.path.basename(path), str(exc)))
+        return None
+
+
+def _write_json(path, data, dry_run):
+    """Write, keeping a one-time .bak of whatever was there first."""
+    if dry_run:
+        return
+    bak = path + ".bak"
+    if not os.path.isfile(bak) and os.path.isfile(path):
+        shutil.copy2(path, bak)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=1, ensure_ascii=False)
+
+
+def _event_runs_banned(entry, banned):
+    """Share of an MTGO event's decks that register a card banned in this era.
+
+    An MTGO decklist dump is stamped with its *publication* date, and a league
+    dump published on the morning of a ban is a record of games played the week
+    before it. The 2026-08-10 Standard League dump is the worked example: three
+    of its six lists run Badgermole Cub, which nobody could register that day.
+
+    So the date is evidence and the cards are proof. Where they disagree, the
+    cards win. Same reasoning as judging events by decklists instead of by name.
+    """
+    decks = entry.get("decks") if isinstance(entry, dict) else None
+    if not banned or not isinstance(decks, list) or not decks:
+        return 0.0
+    hits = 0
+    for deck in decks:
+        if not isinstance(deck, dict):
+            continue
+        if deck_names(deck) & banned:
+            hits += 1
+    return hits / len(decks)
+
+
+def _entry_deck_runs_banned(entry, banned):
+    """True when a classification records the *deck* running a banned card.
+
+    `new_cards` is what this deck ran that its reference didn't, so a banned
+    card there came off the decklist. `cuts` is the mirror: cards the reference
+    has and the deck doesn't, so a banned card there says the reference is
+    stale, not that the deck is illegal. Reading `cuts` as deck evidence would
+    delete 23 perfectly good post-ban Jeskai Lessons classifications.
+    """
+    if not banned or not isinstance(entry, dict):
+        return False
+    for item in (entry.get("new_cards") or []):
+        card = item.get("card") if isinstance(item, dict) else item
+        if str(card).strip().lower() in banned:
+            return True
+    return False
+
+
+def clean_date_cache(path, shape, cutoff, dry_run=False, data_dir=None,
+                     banned=None):
+    """Drop entries from before the window start, by date and by cards.
+
+    Returns a summary dict, or None when there is nothing to judge against.
+    """
+    name = os.path.basename(path)
+    data = _load_json(path)
+    if data is None or cutoff is None:
+        return None
+    banned = banned or set()
+
+    dropped_dates = []
+    by_card = 0
+    if shape == "mapping" and isinstance(data, dict):
+        kept, dropped = {}, {}
+        for key, entry in data.items():
+            d = entry.get("date") if isinstance(entry, dict) else None
+            parsed = mtg_era.parse_date(d) if d else None
+            if parsed and parsed < cutoff:
+                dropped[key] = entry
+                dropped_dates.append(d)
+            elif _entry_deck_runs_banned(entry, banned):
+                dropped[key] = entry
+                dropped_dates.append(d)
+                by_card += 1
+            else:
+                kept[key] = entry
+        before, after = len(data), len(kept)
+    elif shape == "list" and isinstance(data, list):
+        kept, dropped = [], []
+        for entry in data:
+            d = entry.get("date") if isinstance(entry, dict) else None
+            parsed = mtg_era.parse_date(d) if d else None
+            if parsed and parsed < cutoff:
+                dropped.append(entry)
+                dropped_dates.append(d)
+            elif _event_runs_banned(entry, banned) > EVENT_BANNED_THRESHOLD:
+                dropped.append(entry)
+                dropped_dates.append(d)
+                by_card += 1
+            else:
+                kept.append(entry)
+        before, after = len(data), len(kept)
+    else:
+        return None
+
+    if before != after:
+        _stash(dropped, data_dir, cutoff, name, dry_run)
+        _write_json(path, kept, dry_run)
+    test = "event date before window start"
+    if by_card:
+        test += ", or decks running a card banned in this era"
+    return {
+        "file": name,
+        "test": test,
+        "before": before,
+        "after": after,
+        "removed": before - after,
+        "removed_by_date": (before - after) - by_card,
+        "removed_by_banned_cards": by_card,
+        "oldest_removed": min(d for d in dropped_dates if d) if any(dropped_dates) else None,
+        "newest_removed": max(d for d in dropped_dates if d) if any(dropped_dates) else None,
+    }
+
+
+def clean_deck_cache(path, pool, banned, cutoff, dry_run=False, data_dir=None):
+    """Drop cached decks that are off-format or run a card banned in this era.
+
+    Judged on cards because the cache carries no event date. Same predicate as
+    judge_deck, so a deck this drops is a deck the event validator would also
+    have refused.
+    """
+    name = os.path.basename(path)
+    data = _load_json(path)
+    if data is None or not isinstance(data, dict):
+        return None
+    if pool is None and not banned:
+        return {"file": name, "test": "skipped: no card pool and no ban list",
+                "before": len(data), "after": len(data), "removed": 0,
+                "banned_decks": 0, "off_format_decks": 0}
+
+    kept, dropped = {}, {}
+    n_banned = n_off = 0
+    for key, entry in data.items():
+        if not isinstance(entry, dict) or entry.get("failed"):
+            kept[key] = entry
+            continue
+        cards = deck_names(entry)
+        if not cards:
+            kept[key] = entry            # nothing to judge; never drop blind
+            continue
+        legal, runs_banned, _ = judge_deck(cards, pool, banned)
+        if runs_banned:
+            n_banned += 1
+            dropped[key] = entry
+        elif legal is False:
+            n_off += 1
+            dropped[key] = entry
+        else:
+            kept[key] = entry
+
+    if dropped:
+        _stash(dropped, data_dir, cutoff, name, dry_run)
+        _write_json(path, kept, dry_run)
+    return {
+        "file": name,
+        "test": "runs a banned card, or under "
+                f"{int(DECK_LEGAL_THRESHOLD * 100)}% format-legal",
+        "before": len(data),
+        "after": len(kept),
+        "removed": len(dropped),
+        "banned_decks": n_banned,
+        "off_format_decks": n_off,
+    }
+
+
+def clean_source_caches(data_dir, fmt, cutoff, pool, banned, dry_run=False):
+    """Apply the era to every cache an analysis reads, not just the CSVs."""
+    results = []
+    for filename, shape in CACHE_DATE_FILES.items():
+        for base in (data_dir, SCRIPT_DIR):
+            path = os.path.join(base, filename)
+            if os.path.isfile(path):
+                rec = clean_date_cache(path, shape, cutoff, dry_run=dry_run,
+                                       data_dir=data_dir, banned=banned)
+                if rec:
+                    results.append(rec)
+                break
+
+    for base in (data_dir, SCRIPT_DIR):
+        path = os.path.join(base, "melee_deck_cache.json")
+        if os.path.isfile(path):
+            rec = clean_deck_cache(path, pool, banned, cutoff,
+                                   dry_run=dry_run, data_dir=data_dir)
+            if rec:
+                results.append(rec)
+            break
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Quarantine scraped events that don't belong in this pool.")
     parser.add_argument("--format", default=None, help="Format to validate. Overrides mtg_config.json.")
@@ -444,6 +713,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Report only; don't rewrite anything.")
     parser.add_argument("--allow", nargs="*", default=[], help="Tournament IDs to keep regardless of verdict.")
     parser.add_argument("--refresh-pool", action="store_true", help="Refetch the card pool from Scryfall first.")
+    parser.add_argument("--skip-caches", action="store_true",
+                        help="Validate events only; leave the deck and MTGO caches alone.")
     args = parser.parse_args()
 
     config = load_config()
@@ -509,6 +780,9 @@ def main():
     seats = [v for v in verdicts if v["verdict"] == "seat"]
     summary = rewrite_combined(data_dir, fmt, verdicts, dry_run=args.dry_run)
     hidden, restored = quarantine_event_files(data_dir, fmt, verdicts, dry_run=args.dry_run)
+    caches = ([] if args.skip_caches
+              else clean_source_caches(data_dir, fmt, cutoff, pool, banned,
+                                       dry_run=args.dry_run))
 
     report = {
         "validated": datetime.now().isoformat(timespec="seconds"),
@@ -525,6 +799,7 @@ def main():
             "min_seat_decks": MIN_SEAT_DECKS,
         },
         "rows": summary,
+        "caches": caches,
         "unreadable_files": UNREADABLE,
         "events": verdicts,
     }
@@ -541,6 +816,26 @@ def main():
               "(renamed *.quarantined.csv)")
     if restored:
         print(f"  per-event files restored: {len(restored)}")
+
+    if caches:
+        print("\n  Source caches (every analysis reads one of these, not just the CSVs):")
+        for c in caches:
+            note = ""
+            if c.get("banned_decks") or c.get("off_format_decks"):
+                note = (f"  [{c.get('banned_decks', 0)} banned, "
+                        f"{c.get('off_format_decks', 0)} off-format]")
+            elif c.get("oldest_removed"):
+                note = f"  [{c['oldest_removed']} to {c['newest_removed']}]"
+                if c.get("removed_by_banned_cards"):
+                    note += (f", {c['removed_by_banned_cards']} caught by cards "
+                             "despite an in-era date")
+            print(f"    {c['file']:32s} {c['before']:5d} → {c['after']:5d} "
+                  f"({c['removed']} removed){note}")
+        moved = sum(c["removed"] for c in caches)
+        if moved and not args.dry_run:
+            print(f"    {moved} entr(ies) parked in "
+                  f"archive/through-{cutoff.strftime('%Y-%m-%d') if cutoff else 'unknown'}/"
+                  " and .bak kept beside each file")
 
     if UNREADABLE:
         print(f"\n  WARNING: {len(UNREADABLE)} file(s) could not be read, so the events "

@@ -66,6 +66,12 @@ EXCLUDE_FILES = {
     "mtgdecks_fetch.py",   # orphan: Cloudflare-blocked, not referenced in any SKILL.md
     "analyze_weekend.py",  # hardcoded to specific tournament IDs; stays local
     "standings_only_events.json",  # the user's scraped-event registry
+    # The cached Comprehensive Rules and its version stamp. rules_lookup.py
+    # downloads them on first use, so shipping a copy only guarantees a stale
+    # one. The .txt is already caught by the suffix rule; the stamp is not, and
+    # a stamp without its document makes --version lie.
+    "comp_rules_cache.txt",
+    "comp_rules_cache.version",
     ".gitignore",
     ".gitattributes",
     "CHANGELOG.md",
@@ -77,14 +83,22 @@ KEEP_JSON = {"set_releases.json", "mtg_config.json", "bans.json"}
 
 # The only .md files that ship from the repo root. Everything under skills/
 # ships regardless: that is where the archetype notes live.
-KEEP_ROOT_MD = {"README.md"}
+# CLAUDE.md is the plugin router. It ships because a reader who opens the
+# installed plugin should land on the map before a SKILL.md.
+KEEP_ROOT_MD = {"README.md", "CLAUDE.md"}
 
 # The build fails if any of these match nothing. A bundle missing its archetype
 # notes still zips cleanly and still installs; it is just wrong, and quietly.
 REQUIRED = {
     "plugin manifest": lambda p: p == Path(".claude-plugin/plugin.json"),
+    "plugin router": lambda p: p == Path("CLAUDE.md"),
     "analysis skill": lambda p: p == Path("skills/mtg-tournament-analysis/SKILL.md"),
     "deck-check skill": lambda p: p == Path("skills/deck-check/SKILL.md"),
+    "vod-review skill": lambda p: p == Path("skills/vod-review/SKILL.md"),
+    "rules-check skill": lambda p: p == Path("skills/rules-check/SKILL.md"),
+    "rules reference": lambda p: (
+        p == Path("skills/rules-check/reference/rules-and-the-stack.md")),
+    "rules lookup script": lambda p: p == Path("rules_lookup.py"),
     "archetype notes": lambda p: (
         p.match("skills/mtg-tournament-analysis/reference/archetypes/*.md")
         and p.name != "README.md"

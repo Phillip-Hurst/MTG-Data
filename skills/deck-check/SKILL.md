@@ -12,6 +12,8 @@ One job: get every deck under the right archetype name, and make that name the o
 | Skill | What it's for | Hand off when |
 |---|---|---|
 | `mtg-tournament-analysis` | Meta reads: shares, win rates, matchup matrices, what changed, and card-level signal across the field (`card_signal.py`) | The user wants to know about the format rather than fix a label. Send them there **after** clearing the queue — a matchup matrix built on wrong labels is worse than none |
+| `vod-review` | Reviews the user's own games and finds the decisions that decided them | An opponent's deck has been named and the question becomes how the match was played |
+| `rules-check` | Quotes the Comprehensive Rules. Priority, the stack, triggers, state-based actions, layers | A ruling is needed. Naming a deck is a judgement call about what a deck *is*; this is the skill for what the rules *say* |
 
 `mtg-price-check` prices a Moxfield binder against Face to Face Games. It is a separate skill and does not ship in this plugin, so point the user at it by name rather than assuming it is installed.
 

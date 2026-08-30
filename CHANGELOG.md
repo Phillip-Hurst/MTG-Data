@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.7.0 - 2026-08-30
+
+Two new skills, and a router note so a reader knows which of the four to open.
+
+### Reviewing games, not just fields
+
+- **New skill: `vod-review`.** Reviews your own play from an untapped.gg match replay, a YouTube gameplay VOD, or a pasted MTGA/MTGO log. The rule it enforces is judging a decision on the information available when it was made, rather than on what the top of the library turned out to be. Grades land in three buckets: punt, close, and correct-but-lost, and the last one is the most useful and the most under-used.
+- **New skill: `rules-check`.** Answers rules questions by quoting the current Comprehensive Rules with the rule number, never from memory. `vod-review` hands priority and timing questions here rather than guessing, because a review's whole finding often rests on whether a response was possible.
+- **New `rules_lookup.py`.** Scrapes the WotC rules page for the current dated CR text file, caches it beside the scripts, and refreshes after 14 days or when WotC publishes a newer one. Lookup by rule number (`117.3b`), by section (`704`), by keyword, or in the Glossary. Stdlib only, like `mtg_era.py`. It prints the CR version with every result, so an answer can be traced to a document and re-checked after the next set.
+- **New `skills/rules-check/reference/rules-and-the-stack.md`.** The working summary: priority, the stack, triggered abilities, state-based actions, layers, combat, replacement effects. Verified against CR 20260819. It also draws the line the CR doesn't cover, because deck registration, missed triggers and slow play live in the tournament documents, and answering those with a CR number is a confident way to be wrong at an event.
+
+### A router for the plugin
+
+- **New `CLAUDE.md` at the repo root.** A routing table sending a question to the right skill, the data stack drawn as a flow, a table of which consumer reads which file, and the eight hard rules. It ships with the plugin and `package.py` fails the build without it.
+- The "which consumer reads which file" table is the one worth reading. Fixing data means fixing the file the consumer reads, not the one that looks canonical, and that has caused four separate bugs here.
+
+### Housekeeping
+
+- `package.py` `REQUIRED` gained the router, both new skills, the rules reference and `rules_lookup.py`, so a bundle missing any of them fails the build instead of installing quietly.
+- Both existing SKILL.md files name the two new siblings, per the standing rule. The sibling tests discover skills from the folder, so they caught this rather than a human remembering.
+
 ## 1.6.0 — 2026-08-30
 
 Two things: the repo is a plugin with more than one skill now, and the event pool gets validated against cards instead of trusting what melee says about itself.

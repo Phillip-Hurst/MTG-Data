@@ -29,6 +29,13 @@ archive/
 # Transcripts — large, personal
 transcripts/
 
+# Comprehensive Rules cache, downloaded by rules_lookup.py. About 1 MB, and it
+# is superseded with every set release, so a committed copy is a stale copy.
+# The .version stamp goes with it: a stamp without its document makes
+# `rules_lookup.py --version` report a CR the cache doesn't contain.
+comp_rules_cache.txt
+comp_rules_cache.version
+
 # Logs and debug output
 logs/
 *.txt
