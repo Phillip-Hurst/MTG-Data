@@ -16,9 +16,19 @@ Two new skills, and a router note so a reader knows which of the four to open.
 - **New `CLAUDE.md` at the repo root.** A routing table sending a question to the right skill, the data stack drawn as a flow, a table of which consumer reads which file, and the eight hard rules. It ships with the plugin and `package.py` fails the build without it.
 - The "which consumer reads which file" table is the one worth reading. Fixing data means fixing the file the consumer reads, not the one that looks canonical, and that has caused four separate bugs here.
 
+### The era now applies to every file an analysis reads
+
+- **`validate_events.py` cleans the source caches, not just the CSVs.** The era mechanism shipped in 1.5.0 and was only ever enforced against melee CSVs. Three weeks later `mtgo_classifications.json` still held rows dated 2026-06-03, both MTGO dumps still held events from before the window opened, and `melee_deck_cache.json` still held 71 decks running Badgermole Cub. Every script exited 0 the whole time. `build_refs_from_melee.py` worked around the dirty cache with a read-time filter, which is exactly why the references came out clean and nothing looked wrong.
+- **Two tests, because the files carry different evidence.** The MTGO files have an event date, so date decides. `melee_deck_cache.json` has no event date at all, so cards decide, using the same `judge_deck` predicate the event validator already trusts. It drops the same 188 decks the reference builder rejects at read time, which is the corroboration that the two agree.
+- **The case that needed both: publication date is not play date.** An MTGO dump is stamped with the day it was published, so the league dump published on the morning of a ban is a record of games played the week before it. Three of its six lists run Badgermole Cub. A date-only filter admits all of them. Cards now override an in-era date, at the same 10% threshold the event validator uses.
+- **Nothing is deleted.** Removed entries are archived to `archive/through-YYYY-MM-DD/*.pre-era.json` and a one-time `.bak` is kept beside each file. Pre-era data stays readable for cross-era questions.
+- `--skip-caches` validates events only. The report gains a `caches` section, so `build_baseline.py` inherits the guarantee.
+- Live result on the maintainer's data: 2,421 pre-era entries archived, **0 decks running a banned card left in any of the four files**, and a second run is a no-op.
+
 ### Housekeeping
 
 - `package.py` `REQUIRED` gained the router, both new skills, the rules reference and `rules_lookup.py`, so a bundle missing any of them fails the build instead of installing quietly.
+- **55 → 77 tests.** `tests/test_cache_cleaning.py` covers one test per defect above plus the safety properties: dry-run writes nothing, the backup is never overwritten by already-cleaned data, a deck that can't be judged is kept rather than dropped blind, and a file dropping off the covered list fails the suite.
 - Both existing SKILL.md files name the two new siblings, per the standing rule. The sibling tests discover skills from the folder, so they caught this rather than a human remembering.
 
 ## 1.6.0 — 2026-08-30
