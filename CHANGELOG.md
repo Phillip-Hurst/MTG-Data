@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.6.0 — 2026-08-30
+
+Two things: the repo is a plugin with more than one skill now, and the event pool gets validated against cards instead of trusting what melee says about itself.
+
+### Now a plugin, and built to take more skills
+
+- **The plugin is `mtg-data`** (was `mtg-tournament-analysis`, which collided with the name of a skill inside it). Existing installs need a reinstall under the new id.
+- `SKILL.md` moved from the repo root to `skills/mtg-tournament-analysis/SKILL.md`. A root `SKILL.md` alongside a `skills/` folder risked double-registering on install.
+- **New skill: `deck-check`.** It assigns archetype names and pushes them into the pairing and standings CSVs the win rates are built from. `mtg-tournament-analysis` no longer categorizes anything; for a deck it can't name it reports the cards performing in it and hands off.
+- **New `.claude-plugin/marketplace.json`**, so the repo installs directly: `/plugin marketplace add Phillip-Hurst/MTG-Data`. `setup.py` is still required after install, because the scrapers run on your machine rather than in a Claude session.
+- **Standing rule, enforced by a test:** every skill in a multi-skill plugin carries a `## Related skills in this plugin` table naming its siblings and when to hand off. Adding a skill means updating the others, and `test_every_skill_in_this_plugin_names_its_siblings` fails if you don't.
+- The 25 archetype notes ship at `skills/mtg-tournament-analysis/reference/archetypes/`. Those filenames are the canonical vocabulary that every source's deck names resolve onto.
+- **`package.py` rewritten.** It builds `mtg-data.plugin` in the plugin directory layout, including `.claude-plugin/plugin.json` and everything under `skills/`. The old version decided exclusions on the bare filename, so every `.md` not literally called `SKILL.md` was dropped: all 25 archetype notes, silently. It now decides on the relative path and fails closed if the manifest, either skill, or the archetype notes come out missing.
+
+### The event pool
+
+- **New `validate_events.py`.** Judges events by their decklists, not their names or their metadata. Verdicts: `off-format`, `pre-era`, `variant`, `seat`, `unverified`, `ok`. Failures are quarantined out of the combined CSVs and renamed out of the per-event glob, with `*.raw.csv` preserved. Runs automatically after every scrape.
+- **Two bugs in `mtg_fetch.py`, both now fail closed.** Every date filter sat behind `if date_val:`, so an undated row skipped the window check and was admitted. And the format filter matched `"magic"`, which appears in `GameDescription` on every event of every format, which is how a Modern team-trios event entered a Standard pool. Undated events are now skipped and reported with a copy-pasteable command.
+- What that missed: 1,316 of 1,708 pairing rows didn't belong. A pre-ban paper event, the Modern team event, and an Artisan side event whose every card is Standard-legal. **Card legality is necessary and not sufficient.** Nothing errored, and a published note carried a banned deck at 6.8% of a "post-ban" metagame for 17 days.
+- Per-event CSVs that fail validation are renamed `*.quarantined.csv`. `matchup_matrix.py` and `winrate_analysis.py` glob the per-event files and skip the combined one, so cleaning only the combined file left bad events invisible to the snapshot and fully visible to the matrix.
+- Validation discovery unions the combined and per-event sources, so a second run sees what the first run saw. Reading only its own cleaned output made it non-idempotent.
+- **New `build_card_pool.py`**: caches a format's legal card names from Scryfall (5,365 for Standard) into `card_pool_<format>.json`.
+- **`build_baseline.py`** refuses to snapshot when the quarantine report is missing, built for a different era, or older than the last scrape. `--skip-validation-check` overrides.
+
+### Archetype references
+
+- **New `audit_refs.py`.** Checks `archetype_refs.json` for banned and off-format references, labels colliding on 60%+ of their slots, thin references that over-match, and coverage against the live field. `--strict` exits non-zero. `--apply-aliases` collapses confirmed duplicates, backing up to `archetype_refs.pre-alias.json` first. Runs after every scrape.
+- **`build_refs_from_melee.py`** filters off-era decks out of the deck cache before building. Without it a rebuild produced 45 references, 6 of them Modern, which would then have been matched against live Standard decks. The quarantine had cleaned the CSVs and never touched the cache. It also survives an unreadable CSV instead of aborting the whole rebuild.
+- **`build_mtgtop8_baseline.py`** gained the same era guard. Its "last 2 weeks" window isn't era-aware, so running it the morning after a B&R pulls in decks built around a card that's no longer legal.
+- Seeding references from mtgtop8 took the unnamed share of a post-ban field from 42% to 24% in one command. `_write_refs` is additive and never clobbers a locally refined reference.
+- **`mtg_stats.ARCHETYPE_ALIASES`** went from 1 entry to 13, every canonical name taken from a shipped archetype note. Two new tests: one fails if an alias points at a name with no note, another if the table ever chains A to B to C.
+
+### Cards, corrections, eras
+
+- **New `card_signal.py`**: tracks individual cards across the whole field through four lenses. `rogue` (under 8% of the field, pilots beating the field average), `deviation` (cards outside an archetype's goto build, ranked by how much better those pilots finished), `trend` (adoption moving across the window), `unnamed` (shells grouped by co-occurrence, handed to `deck-check`). Rows resting on fewer than 4 pilots are marked.
+- **New `apply_corrections.py`**: reads `Decision:` lines from the Obsidian mislabel notes into `archetype_overrides.json`, then applies them to the deck cache, the MTGO classifications, and every pairing and standings CSV. `--dry-run`, `--list`, `--reapply`, `--backfill`. Exits non-zero when it finds nothing rather than reporting success on an empty run.
+- **`mtg_era.py`** gained `MERGE_ANCHOR_DAYS = 14`: a ban and a set release inside a fortnight are one reset, anchored on the earlier date so no results are lost.
+- **`set_releases.json`**: added The Hobbit (2026-08-14). It was missing, and the era window had landed on the right date by accident.
+
+### Tests and packaging hygiene
+
+- 26 new tests in `tests/test_event_validation.py` covering the validator, plus the alias, sibling and ASCII rules.
+- `test_shipped_shell_scripts_are_strictly_ascii` fails on any `.bat`, `.ps1` or `.cmd` carrying a byte above 127, and names the character. Windows PowerShell 5.1 reads a BOM-less file as ANSI, so a UTF-8 em dash breaks string termination. That killed every scheduled scrape for two days in June and a new script in August. The rule had been a comment both times.
+- `test_mtg_stats.py` fixtures switched from `"Izzet"` to `Placeholder Deck A/B`. "Izzet" stopped being a placeholder when it became an alias, which would have broken three counting tests on a naming change. `test_placeholders_are_not_aliased` now guards the fixture.
+- `test_live_data_invariants` skips with a clear message when every pairing file is unreadable, instead of crashing on a OneDrive cloud-only placeholder.
+- **Two `.gitignore` bugs, found by testing it rather than reading it.** `[C] *.md` read `[C]` as a character class, so it matched files starting `C ` and never ignored the review notes. Unanchored, it also matched at every level, which would have silently excluded the 25 shipped archetype notes. Now `/\[C\] *.md`, verified with `git check-ignore`.
+- `.gitignore` also covers `card_pool_*.json`, `event_quarantine_*.json`, `archetype_overrides.json`, `*.quarantined.csv` and `*.raw.csv`.
+
+## 1.5.0 — 2026-08-15
+
+Bans end an era. The data now knows that.
+
+### Format eras
+- New `bans.json`: B&R announcements with effective date, format, cards, and the decks each one hit. Seeded with the 2026-08-10 Standard bans (Badgermole Cub, Stormchaser's Talent, Gran-Gran) plus the Legacy and Vintage changes from the same announcement.
+- New `mtg_era.py`: resolves the current era for a format as the later of the newest set release and the newest ban. Exposes `resolve_era()` and `previous_era()`, and runs standalone (`python mtg_era.py`, `--json`) to print the window start, the anchor, the slug, and why. Standard library only.
+- `mtg_fetch.py`'s `get_window_start()` now anchors on the era instead of reading `set_releases.json` directly, so a ban moves the search window the same way a rotation does. It prints the reason and, after a ban, points at `archive_era.py`.
+- `build_baseline.py` writes to `meta_baseline_<era_slug>.json` and stamps each snapshot with its era and start date. A set-only era slugs identically to the old set slug, so baselines written before this change keep their filename and keep meaning the stretch they actually cover. The practical effect: the run-over-run delta in the weekly note can never straddle a ban and report a banned deck as "down 12 points."
+
+### Archiving
+- New `archive_era.py`: moves every scraped CSV, the MTGO dumps, the deck cache, and the closing era's baseline into `archive/through-YYYY-MM-DD/`, and writes a `manifest.json` with the era labels, the closing ban, the file list, and row counts. `--dry-run` first.
+- This is the part that actually matters: `winrate_analysis.py`, `matchup_matrix.py` and `update_archetypes.py` glob `melee_*_pairings.csv` out of the data folder non-recursively and treat every hit as one pool. Correct inside an era, silently wrong across one. Moving the files down a level is the fix.
+- `package.py` excludes `archive/` and now ships `bans.json`. `.gitignore` covers `archive/`.
+
+### Docs
+- SKILL.md gains a "Format eras" section: what ends an era, the four-step routine when a ban lands, how to read archived data without laundering it into live numbers, and how to talk about a metagame that's four days old. Step 0 now checks the live ban list against `bans.json` before anything else. Intra-set/cross-set framing is now intra-era/cross-era throughout, and the cross-era layer asks for the mechanism: a deck that cratered because its 4-of got banned isn't a metagame trend.
+
 ## 1.4.0 — 2026-06-29
 
 Local-first framing, and a baseline so a fresh install starts with something.

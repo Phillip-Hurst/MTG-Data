@@ -10,6 +10,22 @@ mtgo_classifications.json
 baselines/
 *.json.bak
 
+# Generated per-run reports and caches (2026-08-29). All regenerable:
+# card_pool_* from Scryfall, event_quarantine_* from validate_events.py.
+# archetype_overrides.json holds this user's own deck-label rulings — personal,
+# and it lives in the OneDrive-synced vault, so it doesn't belong in a public repo.
+card_pool_*.json
+event_quarantine_*.json
+archetype_overrides.json
+archetype_refs.pre-alias.json
+*.quarantined.csv
+*.raw.csv
+
+
+# Frozen previous-era data written by archive_era.py — same reasoning as the
+# live CSVs, just older. The manifest goes with it.
+archive/
+
 # Transcripts — large, personal
 transcripts/
 
@@ -32,6 +48,7 @@ __pycache__/
 
 # Packaged skill output
 *.skill
+*.plugin
 
 # Dev/probe scripts and local-only helpers (kept out of the public skill too)
 probe_page.py
@@ -44,7 +61,14 @@ mtgdecks_fetch.py
 analyze_weekend.py
 
 # Personal vault notes, analysis output, and registries — never publish these
-\[C\] *.md
+# Two subtleties here, both learned the hard way on 2026-08-29:
+#  - the brackets are escaped because gitignore reads [C] as a character class;
+#    unescaped it matches a file starting "C ", not "[C] "
+#  - the leading slash anchors it to the repo root. Unanchored it matched at
+#    every level and silently excluded the 25 shipped archetype notes in
+#    skills/mtg-tournament-analysis/reference/archetypes/, which are the
+#    canonical vocabulary and very much meant to publish.
+/\[C\] *.md
 mtgo_deck_log.md
 melee_win_rate_tracker.md
 standings_only_events.json

@@ -1,106 +1,192 @@
 """
-Run this once from a terminal to create the installable .skill file:
+Build the installable plugin bundle:
 
-    python package.py
+    python package.py            # writes mtg-data.plugin next to the repo
+    python package.py --dry-run  # list what would ship, write nothing
 
-It produces mtg-tournament-analysis.skill in the parent folder. Drop that
-file into Cowork to install the skill.
+Most people never need this. The normal install is the marketplace:
 
-The .skill contains SKILL.md, the Python scripts (including setup.py), and the
-shipped config (set_releases.json, mtg_config.json). It deliberately excludes:
-  - every scraped data file (CSV/JSON the scrapers generate)
-  - run logs (*.log) and dev/probe scripts
-  - loose notes (*.md) other than SKILL.md, so personal vault notes never ship
-  - the scraped-event registry (standings_only_events.json)
-  - plugin metadata, README/CHANGELOG, baselines, transcripts
+    /plugin marketplace add Phillip-Hurst/MTG-Data
+    /plugin install mtg-data@mtg-data
 
-After it builds, it prints the full file list AND a leak check that flags
-anything suspicious. Always eyeball that list before publishing a release.
+This script exists for release artifacts and for installing from a local
+checkout. It produces a zip whose root is the plugin directory layout:
+
+    mtg-data/
+      .claude-plugin/plugin.json
+      skills/mtg-tournament-analysis/SKILL.md
+      skills/mtg-tournament-analysis/reference/archetypes/*.md
+      skills/deck-check/SKILL.md
+      *.py, set_releases.json, mtg_config.json, bans.json, setup.bat
+      README.md, LICENSE
+
+What it deliberately leaves out: scraped data (CSV/JSON the scrapers write),
+run logs, dev and probe scripts, the test suite, transcripts, baselines, and
+the personal vault notes at the repo root.
+
+Exclusion is decided on the *relative path*, not the bare filename. An earlier
+version tested the filename only, so every .md that was not literally called
+SKILL.md was dropped, which silently excluded all 25 shipped archetype notes.
+Those notes are the canonical archetype vocabulary, so the bundle was broken in
+exactly the way a passing run cannot show you. `REQUIRED` below now fails the
+build if they go missing again.
 """
+import argparse
+import sys
 import zipfile
 from pathlib import Path
 
-skill_dir = Path(__file__).parent
-out_file = skill_dir.parent / "mtg-tournament-analysis.skill"
+PLUGIN_NAME = "mtg-data"
 
-# Directories excluded entirely from the .skill
+repo = Path(__file__).parent
+out_file = repo.parent / f"{PLUGIN_NAME}.plugin"
+
+# Directories excluded entirely, matched on any path segment.
 EXCLUDE_DIRS = {
+    ".git",
     "transcripts",
     "__pycache__",
-    ".pytest_cache",  # created by running the test suite; must not ship
+    ".pytest_cache",
     ".ruff_cache",
     ".mypy_cache",
     ".venv",
     "baselines",
+    "archive",        # frozen previous-era scrape data, written by archive_era.py
     "logs",
-    "tests",          # repo-only; the installed skill doesn't need the test suite
-    ".claude-plugin",
-    ".git",
+    "tests",          # repo-only; an installed plugin doesn't need the test suite
 }
 
-# Individual files excluded from the .skill
+# Individual files excluded, matched on the bare filename.
 EXCLUDE_FILES = {
     "package.py",
     "probe_log.txt",
     "run_log.txt",
     "probe_melee.py",
     "probe_page.py",
-    "mtgdecks_fetch.py",   # orphan: Cloudflare-blocked, not referenced in SKILL.md
-    "analyze_weekend.py",  # hardcoded to specific tournament IDs; stays local, doesn't ship
+    "mtgdecks_fetch.py",   # orphan: Cloudflare-blocked, not referenced in any SKILL.md
+    "analyze_weekend.py",  # hardcoded to specific tournament IDs; stays local
     "standings_only_events.json",  # the user's scraped-event registry
     ".gitignore",
+    ".gitattributes",
+    "CHANGELOG.md",
+    "marketplace.json",    # describes the repo as a source; not part of the bundle
 }
 
-# Config files that SHOULD ship even though they're .json (they seed a setup).
-KEEP_JSON = {"set_releases.json", "mtg_config.json"}
+# Config that SHOULD ship even though it is .json (it seeds a fresh setup).
+KEEP_JSON = {"set_releases.json", "mtg_config.json", "bans.json"}
 
-# The only .md that ships. Everything else (vault notes, README, CHANGELOG,
-# deck logs saved as .md) stays out.
-KEEP_MD = {"SKILL.md"}
+# The only .md files that ship from the repo root. Everything under skills/
+# ships regardless: that is where the archetype notes live.
+KEEP_ROOT_MD = {"README.md"}
 
-
-def should_exclude(name: str) -> bool:
-    """True for files that must never ship in the public .skill."""
-    if name in EXCLUDE_FILES:
-        return True
-    if name.endswith(".log"):
-        return True
-    if name.endswith(".md") and name not in KEEP_MD:
-        return True
-    if name.endswith(".html"):   # all debug / scraped HTML dumps
-        return True
-    if name.endswith((".csv",)):  # all scraped CSVs
-        return True
-    if name.endswith(".json") and name not in KEEP_JSON:
-        return True  # scraped JSON, caches, classifications, registries
-    return False
+# The build fails if any of these match nothing. A bundle missing its archetype
+# notes still zips cleanly and still installs; it is just wrong, and quietly.
+REQUIRED = {
+    "plugin manifest": lambda p: p == Path(".claude-plugin/plugin.json"),
+    "analysis skill": lambda p: p == Path("skills/mtg-tournament-analysis/SKILL.md"),
+    "deck-check skill": lambda p: p == Path("skills/deck-check/SKILL.md"),
+    "archetype notes": lambda p: (
+        p.match("skills/mtg-tournament-analysis/reference/archetypes/*.md")
+        and p.name != "README.md"
+    ),
+}
 
 
-added = []
-with zipfile.ZipFile(out_file, "w", zipfile.ZIP_DEFLATED) as zf:
-    for f in skill_dir.rglob("*"):
-        if not f.is_file():
+def should_ship(rel: Path) -> bool:
+    """Decide on the relative path, never on the filename alone."""
+    if any(part in EXCLUDE_DIRS for part in rel.parts):
+        return False
+    if rel.name in EXCLUDE_FILES:
+        return False
+    if rel.name.endswith((".log", ".txt", ".html", ".csv")):
+        return False
+
+    # Everything under skills/ ships, including reference notes.
+    if rel.parts and rel.parts[0] == "skills":
+        return True
+
+    # The manifest ships; nothing else in .claude-plugin does.
+    if rel.parts and rel.parts[0] == ".claude-plugin":
+        return rel.name == "plugin.json"
+
+    if rel.suffix == ".md":
+        return rel.name in KEEP_ROOT_MD
+    if rel.suffix == ".json":
+        return rel.name in KEEP_JSON
+    return True
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Build the mtg-data plugin bundle.")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="list what would ship and write nothing")
+    args = ap.parse_args()
+
+    shipped: list[Path] = []
+    skipped: list[Path] = []
+    unreadable: list[tuple[Path, str]] = []
+
+    for f in sorted(repo.rglob("*")):
+        try:
+            if not f.is_file():
+                continue
+        except OSError as e:
+            # OneDrive cloud-only placeholders raise here on a path that a
+            # directory listing shows as present. Unreadable is not clean.
+            unreadable.append((f.relative_to(repo), str(e)))
             continue
-        rel = f.relative_to(skill_dir)
-        if any(part in EXCLUDE_DIRS for part in rel.parts):
-            continue
-        if should_exclude(f.name):
-            continue
-        arcname = f.relative_to(skill_dir.parent)
-        zf.write(f, arcname)
-        added.append(str(arcname))
-        print(f"  Added: {arcname}")
+        rel = f.relative_to(repo)
+        if should_ship(rel):
+            shipped.append(rel)
+        else:
+            skipped.append(rel)
 
-print(f"\nDone -> {out_file}  ({len(added)} files)")
+    # Fail closed before writing anything.
+    missing = [label for label, match in REQUIRED.items()
+               if not any(match(p) for p in shipped)]
+    if missing:
+        print("Bundle is missing required content, nothing written:")
+        for label in missing:
+            print(f"  - {label}")
+        return 1
 
-# Leak check: flag anything that looks like it shouldn't be public.
-suspicious = [a for a in added
-              if a.endswith((".log", ".csv"))
-              or (a.endswith(".md") and not a.endswith("SKILL.md"))
-              or (a.endswith(".json") and Path(a).name not in KEEP_JSON)]
-if suspicious:
-    print("\n  WARNING — these look like they should NOT ship:")
-    for s in suspicious:
-        print(f"    {s}")
-else:
-    print("  Leak check: clean. No data files, logs, or stray notes in the package.")
+    if unreadable:
+        print(f"{len(unreadable)} file(s) could not be read, nothing written:")
+        for rel, err in unreadable[:10]:
+            print(f"  - {rel}: {err}")
+        print("\nOn OneDrive, mark the repo folder 'Always keep on this device'.")
+        return 1
+
+    n_notes = sum(1 for p in shipped if REQUIRED["archetype notes"](p))
+
+    if args.dry_run:
+        for rel in shipped:
+            print(f"  Would add: {PLUGIN_NAME}/{rel.as_posix()}")
+    else:
+        with zipfile.ZipFile(out_file, "w", zipfile.ZIP_DEFLATED) as zf:
+            for rel in shipped:
+                zf.write(repo / rel, f"{PLUGIN_NAME}/{rel.as_posix()}")
+                print(f"  Added: {PLUGIN_NAME}/{rel.as_posix()}")
+
+    verb = "Would write" if args.dry_run else "Wrote"
+    print(f"\n{verb} -> {out_file}")
+    print(f"  {len(shipped)} file(s) shipped, {n_notes} archetype note(s)")
+    print(f"  {len(skipped)} file(s) excluded (data, logs, tests, vault notes)")
+
+    # Leak check: anything shipping from the repo root that looks like data.
+    leaks = [p for p in shipped
+             if len(p.parts) == 1
+             and (p.suffix in {".csv", ".log", ".txt"}
+                  or (p.suffix == ".json" and p.name not in KEEP_JSON)
+                  or (p.suffix == ".md" and p.name not in KEEP_ROOT_MD))]
+    if leaks:
+        print("\n  WARNING - these should NOT ship:")
+        for p in leaks:
+            print(f"    {p.as_posix()}")
+        return 2
+    print("  Leak check: clean.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

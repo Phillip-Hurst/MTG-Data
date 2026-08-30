@@ -312,13 +312,67 @@ def build(fmt, max_archetypes, decks_per_archetype, delay, verbose, dry_run):
             print(json.dumps(snapshot, indent=2, ensure_ascii=False)[:2000])
         return True
 
-    _write_refs(archetype_refs)
+    _write_refs(archetype_refs, fmt)
     _write_snapshot(snapshot, fmt)
     return True
 
 
-def _write_refs(new_refs):
-    """Merge into archetype_refs.json without clobbering existing entries."""
+def _era_guard(fmt):
+    """
+    (pool, banned) for the current era, or (None, set()) when unavailable.
+
+    mtgtop8's "last 2 weeks" window is not era-aware. Run this the morning
+    after a B&R and half the decks it returns are built around a card that is
+    no longer legal, which then becomes a reference that live decks get matched
+    against. It happened to be clean on 2026-08-29 only because the ban was 19
+    days earlier — luck, not a guarantee.
+    """
+    try:
+        import build_card_pool
+        import validate_events as ve
+        import mtg_era as _era
+        e = _era.resolve_era(fmt=fmt)
+        pool, _meta = build_card_pool.load_pool(fmt, DATA_DIR)
+        return pool, ve.banned_as_of(fmt, e.get("start"))
+    except Exception:
+        return None, set()
+
+
+def _ref_belongs(ref, pool, banned):
+    names = {str(c).strip().lower() for c in (ref.get("mainboard") or {})}
+    if not names:
+        return False, "empty mainboard"
+    hits = names & banned
+    if hits:
+        return False, "banned: " + ", ".join(sorted(hits))
+    if pool is None:
+        return True, ""
+    illegal = names - pool
+    if len(illegal) / len(names) > 0.05:
+        return False, f"{len(illegal)}/{len(names)} off-format"
+    return True, ""
+
+
+def _write_refs(new_refs, fmt="Standard"):
+    """Merge into archetype_refs.json without clobbering existing entries.
+
+    Anything from another era or another format is dropped before it can
+    become something live decks are classified against.
+    """
+    pool, banned = _era_guard(fmt)
+    if pool is None:
+        print("  NOTE: no card pool on file, so off-format references can't be "
+              "filtered. Run build_card_pool.py.")
+    kept, rejected = {}, []
+    for label, ref in new_refs.items():
+        ok, why = _ref_belongs(ref, pool, banned)
+        (kept.__setitem__(label, ref) if ok else rejected.append((label, why)))
+    if rejected:
+        print(f"  Rejected {len(rejected)} reference(s) that don't belong in this era:")
+        for label, why in rejected[:8]:
+            print(f"    {label} — {why}")
+    new_refs = kept
+
     path = os.path.join(DATA_DIR, "archetype_refs.json")
     data = {"_note": "Reference mainboard lists for archetype classification. "
                      "Each entry: {mainboard: {card: count}, notes: str}. "

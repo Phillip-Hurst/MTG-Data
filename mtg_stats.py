@@ -22,8 +22,62 @@ Data shapes this expects (from melee_scraper.py):
 
 # Archetype name aliases. Merge organizer labels that are the same deck.
 # Keep this small and explicit; only merge when confirmed.
+#
+# The canonical name on the right is always one the vault already uses — the
+# filenames in 02 Projects/MTG Tournament Analysis Skill/Archetypes/. That's
+# the vocabulary the archetype notes, matchup tables and snapshots are written
+# in, so pulling every source onto it keeps one deck under one name.
+#
+# 2026-08-29: seeding references from mtgtop8 on top of locally-built ones
+# introduced 15 new labels, several of them the same deck under a different
+# house style. audit_refs.py found 16 pairs sharing 60%+ of their slots, and
+# classify_decks picks on raw slot overlap with no margin — so a near-tie is
+# resolved by dictionary order, which is to say arbitrarily. These are the
+# pairs confirmed to be one deck. The genuinely ambiguous ones are deliberately
+# absent; naming a deck is the user's call, not the tooling's.
 ARCHETYPE_ALIASES = {
+    # Four-colour control: four names, one deck.
     "W-U-B-R Control": "Four-Color Control",
+    "W-U-B-R": "Four-Color Control",
+    "4/5C Control": "Four-Color Control",
+    "4c Control": "Four-Color Control",
+    "4-Color Control": "Four-Color Control",
+
+    # melee lets players type a bare guild name; "Izzet" isn't a deck, it's an
+    # unfinished label. Elementals and Spellementals are one deck under two
+    # house styles: the post-ban clustering put all 43 into a single group
+    # labelled 22 Spellementals / 20 Elementals, they share 84% of their slots,
+    # and the mislabel report flags them against each other in both directions.
+    # Spellementals is the name the vault's Archetypes folder uses.
+    "Izzet": "Izzet Spellementals",
+    "Izzet Elementals": "Izzet Spellementals",
+
+    # mtgtop8 house style vs the vault's names.
+    "Dimir Aggro": "Dimir Midrange",
+    "Mardu Aggro": "Mardu Discard",
+    "Azorius Fliers": "Azorius Momo",
+    "Mono Green Aggro": "Mono Green Landfall",
+    "Mono-Green": "Mono Green Landfall",
+    "Mono-Green Landfall": "Mono Green Landfall",
+    "Superior Doomsday": "Dimir Excruciator",
+
+    # 2026-08-29, Phill's rulings.
+    #
+    # Azorius Tempo and Azorius Prison are one deck when both play the flash
+    # game: Aang, Aven Interrupter, High Noon, Voice of Victory. Checked before
+    # applying — both references carry all four, plus Avatar's Wrath, Floodpits
+    # Drowner, Skycoach Conductor and Restless Anchorage. The vault already
+    # settled the name: [C] Azorius Flash.md's front matter reads
+    # "Azorius Flash (Azorius Tempo)".
+    "Azorius Tempo": "Azorius Flash",
+    "Azorius Prison": "Azorius Flash",
+
+    # The Amalia deck. mtgtop8 files it under its colours; what it actually
+    # does is gain life.
+    "Orzhov Aggro": "Orzhov Lifegain",
+    "Orzhov": "Orzhov Lifegain",
+    "Orzhov Combo": "Orzhov Lifegain",
+    "Orzhov Midrange": "Orzhov Lifegain",
 }
 
 

@@ -1,0 +1,51 @@
+{
+  "note": "Banned and Restricted announcements. Each entry with an 'effective' date and a matching 'format' resets the analysis window for that format, the same way a set release does. mtg_era.py takes whichever is later. Add a new entry after every B&R announcement that touches a format you track. Announcements that change nothing for your format do not need an entry.",
+  "next_announcement": "2026-10-12",
+  "announcements": [
+    {
+      "effective": "2026-08-10",
+      "format": "Standard",
+      "label": "post-ban",
+      "banned": [
+        "Badgermole Cub",
+        "Stormchaser's Talent",
+        "Gran-Gran"
+      ],
+      "restricted": [],
+      "unbanned": [],
+      "decks_hit": [
+        "Selesnya Offense",
+        "Izzet Prowess",
+        "Jeskai Lessons"
+      ],
+      "url": "https://magic.wizards.com/en/news/announcements/banned-and-restricted-august-10-2026",
+      "note": "Three bans aimed at format speed. Badgermole Cub had been format-defining since release and anchored every green shell; Stormchaser's Talent was the Izzet Prowess keystone; Gran-Gran was the Jeskai Lessons mana engine. Every archetype built on those three is dead or rebuilding, so pre-2026-08-10 win rates do not carry forward."
+    },
+    {
+      "effective": "2026-08-10",
+      "format": "Legacy",
+      "label": "post-ban",
+      "banned": [
+        "The Fantasticar"
+      ],
+      "restricted": [],
+      "unbanned": [],
+      "decks_hit": [],
+      "url": "https://magic.wizards.com/en/news/announcements/banned-and-restricted-august-10-2026",
+      "note": "Listed for completeness. Only bites if you point mtg_config.json at Legacy."
+    },
+    {
+      "effective": "2026-08-10",
+      "format": "Vintage",
+      "label": "post-restriction",
+      "banned": [],
+      "restricted": [
+        "The Fantasticar"
+      ],
+      "unbanned": [],
+      "decks_hit": [],
+      "url": "https://magic.wizards.com/en/news/announcements/banned-and-restricted-august-10-2026",
+      "note": "Listed for completeness. Only bites if you point mtg_config.json at Vintage."
+    }
+  ]
+}

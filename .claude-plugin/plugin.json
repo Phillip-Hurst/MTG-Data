@@ -1,10 +1,13 @@
 {
-  "name": "mtg-tournament-analysis",
-  "version": "1.4.0",
-  "description": "Analyze Magic: The Gathering tournament results from melee.gg, MTGO, MTGGoldfish, and magic.gg. Surfaces meta trends, matchup data, and what changed week over week. Local-first: a guided setup script and local scrapers do the data collection, and setup seeds a per-format archetype baseline from mtgtop8 so a fresh install has a starting point.",
+  "name": "mtg-data",
+  "version": "1.6.0",
+  "description": "Magic: The Gathering tournament data, from the scrape through to the meta read. Two skills today: mtg-tournament-analysis reads the format (meta share, win rates, matchup matrices, card-level signal), and deck-check assigns archetype names and pushes them back into the numbers those reads are built on. Local-first: Playwright scrapers pull melee.gg and MTGO onto your own machine, and format eras keep pre-ban results out of post-ban numbers. Run setup.py once after install to build the per-format folder tree and wire up scraping.",
   "author": {
     "name": "Phillip Hurst",
     "url": "https://github.com/Phillip-Hurst"
   },
-  "keywords": ["mtg", "magic-the-gathering", "standard", "tournament", "metagame", "melee", "mtgo"]
+  "homepage": "https://github.com/Phillip-Hurst/MTG-Data",
+  "repository": "https://github.com/Phillip-Hurst/MTG-Data",
+  "license": "MIT",
+  "keywords": ["mtg", "magic-the-gathering", "standard", "tournament", "metagame", "melee", "mtgo", "mtgtop8", "archetypes", "deck-check"]
 }

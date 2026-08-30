@@ -111,22 +111,42 @@ def collect_deck_urls():
     csv_files = sorted(glob.glob(pattern))
 
     url_map = {}   # url -> {archetype, player, tournament}
+    unreadable = []
     for path in csv_files:
-        with open(path, encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                for side in ("1", "2"):
-                    url  = row.get(f"player{side}_deck_url", "").strip()
-                    arch = row.get(f"player{side}_deck",     "").strip()
-                    player = row.get(f"player{side}", "").strip()
-                    tourn  = row.get("tournament_name", "").strip()
-                    if url and arch and url not in url_map:
-                        url_map[url] = {
-                            "archetype":   arch,
-                            "player":      player,
-                            "tournament":  tourn,
-                        }
+        # One unreadable file used to abort the whole rebuild. OneDrive
+        # placeholders and locked files both raise OSError here, and losing
+        # every reference because one CSV wasn't hydrated is a bad trade.
+        # Quarantined events are already invisible: validate_events.py renames
+        # them *.quarantined.csv, which this glob doesn't match.
+        try:
+            with open(path, encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+        except OSError as e:
+            unreadable.append((os.path.basename(path), str(e)))
+            continue
+        for row in rows:
+            for side in ("1", "2"):
+                url  = row.get(f"player{side}_deck_url", "").strip()
+                arch = row.get(f"player{side}_deck",     "").strip()
+                player = row.get(f"player{side}", "").strip()
+                tourn  = row.get("tournament_name", "").strip()
+                if url and arch and url not in url_map:
+                    url_map[url] = {
+                        "archetype":   arch,
+                        "player":      player,
+                        "tournament":  tourn,
+                    }
 
-    print(f"Collected {len(url_map)} unique deck URLs from {len(csv_files)} pairings file(s)")
+    read_ok = len(csv_files) - len(unreadable)
+    print(f"Collected {len(url_map)} unique deck URLs from {read_ok} pairings file(s)")
+    if unreadable:
+        print(f"  WARNING: {len(unreadable)} file(s) could not be read and were skipped:")
+        for name, err in unreadable[:6]:
+            print(f"    {name}  ({err.split(':')[0]})")
+        if len(unreadable) > 6:
+            print(f"    ...and {len(unreadable) - 6} more")
+        print("    On OneDrive this means cloud-only placeholders. Mark the data "
+              "folder 'Always keep on this device' and re-run for complete refs.")
     return url_map
 
 
@@ -308,16 +328,73 @@ def build_ref_from_decks(decks):
     return ref
 
 
-def build_refs_from_cache(cache, min_decks):
+def era_filter(fmt="Standard"):
+    """
+    (pool, banned) for the current era, or (None, set()) if unavailable.
+
+    The decklist cache is never cleaned. validate_events.py quarantines events
+    out of the CSVs, but the decks from those events stay cached forever, so a
+    rebuild happily builds references for Modern archetypes and pre-ban builds
+    and then classifies live Standard decks against them. A rebuild on
+    2026-08-29 produced 45 references, 6 of them Modern (Abzan Devoted Druid
+    Combo, Boros Energy, Esper Blink, Gruul Broodscale, Mono-Green Amulet
+    Titan, W-U-B-G Goryo's). Filter here instead.
+    """
+    try:
+        import build_card_pool
+        import validate_events as ve
+        import mtg_era as _era
+    except Exception:
+        return None, set()
+    try:
+        e = _era.resolve_era(fmt=fmt)
+        cutoff = e.get("start")
+        pool, _ = build_card_pool.load_pool(fmt, DATA_DIR)
+        return pool, ve.banned_as_of(fmt, cutoff)
+    except Exception:
+        return None, set()
+
+
+def deck_belongs(mainboard, pool, banned):
+    """True when a cached deck is legal in the format and free of banned cards."""
+    names = {str(c).strip().lower() for c in (mainboard or {})}
+    if not names:
+        return False
+    if banned and (names & banned):
+        return False
+    if pool is None:
+        return True
+    legal = len(names & pool) / len(names)
+    return legal >= 0.95
+
+
+def build_refs_from_cache(cache, min_decks, fmt="Standard"):
     """
     Group cached (non-failed) decks by archetype, build a ref for each.
     Archetypes with fewer than min_decks usable decks are skipped.
+
+    Decks from another format or another era are dropped first — a reference
+    is what live decks get matched against, so poisoning it is worse than
+    having fewer references.
     """
+    pool, banned = era_filter(fmt)
+    if pool is None:
+        print("  NOTE: no card pool on file, so off-format decks can't be filtered "
+              "out of the references. Run build_card_pool.py.")
+
     arch_decks = {}
+    dropped = 0
     for url, data in cache.items():
         if data.get("failed") or not data.get("mainboard"):
             continue
+        if not deck_belongs(data.get("mainboard"), pool, banned):
+            dropped += 1
+            continue
         arch_decks.setdefault(data["archetype"], []).append(data)
+
+    if dropped:
+        print(f"  Dropped {dropped} cached deck(s) from another format or era "
+              "before building references.")
 
     refs = {}
     skipped = []
@@ -471,8 +548,19 @@ def write_mislabel_report(mislabels, run_date_str):
         "",
         f"High confidence: {len(high)}  |  Low confidence: {len(low)}",
         "",
-        "To correct a ref: delete the bad deck URL from melee_deck_cache.json,",
-        "change its archetype field, then rerun with --rebuild-only.",
+        "## How to correct these",
+        "",
+        "Each entry below has a `Decision:` line, pre-filled with the card match.",
+        "Edit it in Obsidian, then run `python apply_corrections.py`.",
+        "",
+        "- **Card match is right** — leave the line alone.",
+        "- **Melee label was right** — put the melee label on the line.",
+        "- **Neither** — type the archetype you actually want.",
+        "- **Not sure yet** — blank the line, or write `skip`. It'll be flagged again next run.",
+        "",
+        "Corrections are written to `archetype_overrides.json`, keyed by decklist URL,",
+        "and reapplied after every scrape. Editing melee_deck_cache.json by hand does",
+        "not survive a rescrape; this does.",
         "",
         "---",
         "",
@@ -497,6 +585,8 @@ def write_mislabel_report(mislabels, run_date_str):
                 f"  ({m['card_score']}/60 slots, {m['card_ratio']*100:.0f}%)",
                 "",
                 f"Top mainboard: {top5}",
+                "",
+                f"Decision: {m['card_arch']}",
                 "",
                 "---",
                 "",

@@ -30,41 +30,56 @@ def row(**kw):
 
 # ── Unit: classify_row ────────────────────────────────────────────────────────
 
+# These use placeholder deck names on purpose. They previously used "Izzet",
+# which stopped being a placeholder on 2026-08-29 when it became an alias for
+# Izzet Spellementals — the counting tests started failing on a change that had
+# nothing to do with counting. Alias folding has its own test below.
+DECK_A = "Placeholder Deck A"
+DECK_B = "Placeholder Deck B"
+
+
 def test_decided_player1_wins():
-    r = row(player1="Jane", player2="Bob", player1_deck="Izzet", player2_deck="Dimir",
+    r = row(player1="Jane", player2="Bob", player1_deck=DECK_A, player2_deck=DECK_B,
             result="Jane won 2-1-0", winner="Jane")
-    assert mtg_stats.classify_row(r) == ("Izzet", "Dimir", "p1")
+    assert mtg_stats.classify_row(r) == (DECK_A, DECK_B, "p1")
 
 
 def test_decided_player2_wins():
-    r = row(player1="Jane", player2="Bob", player1_deck="Izzet", player2_deck="Dimir",
+    r = row(player1="Jane", player2="Bob", player1_deck=DECK_A, player2_deck=DECK_B,
             result="Bob won 2-0-0", winner="Bob")
-    assert mtg_stats.classify_row(r) == ("Izzet", "Dimir", "p2")
+    assert mtg_stats.classify_row(r) == (DECK_A, DECK_B, "p2")
 
 
 def test_draw_is_a_draw():
-    r = row(player1="Jane", player2="Bob", player1_deck="Izzet", player2_deck="Dimir",
+    r = row(player1="Jane", player2="Bob", player1_deck=DECK_A, player2_deck=DECK_B,
             result="1-1-0 Draw", winner="")
-    assert mtg_stats.classify_row(r) == ("Izzet", "Dimir", "draw")
+    assert mtg_stats.classify_row(r) == (DECK_A, DECK_B, "draw")
 
 
 def test_bye_is_dropped():
-    r = row(player1="Jane", player2="", player1_deck="Izzet", player2_deck="",
+    r = row(player1="Jane", player2="", player1_deck=DECK_A, player2_deck="",
             result="Jane was awarded a bye", winner="Jane")
     assert mtg_stats.classify_row(r) is None
 
 
 def test_unparseable_winner_is_dropped_not_a_draw():
     # winner matches neither player and the result isn't a draw → drop it
-    r = row(player1="Jane", player2="Bob", player1_deck="Izzet", player2_deck="Dimir",
+    r = row(player1="Jane", player2="Bob", player1_deck=DECK_A, player2_deck=DECK_B,
             result="garbled", winner="Someone Else")
     assert mtg_stats.classify_row(r) is None
 
 
 def test_missing_deck_is_dropped():
-    r = row(player1="Jane", player2="Bob", player1_deck="Izzet", player2_deck="",
+    r = row(player1="Jane", player2="Bob", player1_deck=DECK_A, player2_deck="",
             result="Jane won 2-1-0", winner="Jane")
     assert mtg_stats.classify_row(r) is None
+
+
+def test_placeholders_are_not_aliased():
+    """Guards the fixture itself: if a placeholder ever gains an alias, say so
+    here rather than letting three unrelated counting tests fail."""
+    for name in (DECK_A, DECK_B):
+        assert mtg_stats.normalize(name) == name
 
 
 def test_alias_is_folded():
@@ -104,21 +119,41 @@ def test_live_data_invariants():
 
     wins = {}          # (a, b) -> times a beat b
     decided = draws = 0
+    unreadable = []
     for path in files:
-        with open(path, encoding="utf-8") as f:
-            for r in csv.DictReader(f):
-                c = mtg_stats.classify_row(r)
-                if not c:
-                    continue
-                d1, d2, outcome = c
-                if outcome == "draw":
-                    draws += 1
-                    continue
-                decided += 1
-                a, b = (d1, d2) if outcome == "p1" else (d2, d1)
-                wins[(a, b)] = wins.get((a, b), 0) + 1
+        # A file we can't open is not a file with nothing wrong in it, but it
+        # also shouldn't crash the suite. OneDrive serves cloud-only
+        # placeholders as OSError, and this vault lives on OneDrive.
+        try:
+            with open(path, encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+        except OSError as e:
+            unreadable.append((os.path.basename(path), str(e)))
+            continue
+        for r in rows:
+            c = mtg_stats.classify_row(r)
+            if not c:
+                continue
+            d1, d2, outcome = c
+            if outcome == "draw":
+                draws += 1
+                continue
+            decided += 1
+            a, b = (d1, d2) if outcome == "p1" else (d2, d1)
+            wins[(a, b)] = wins.get((a, b), 0) + 1
 
-    assert decided > 0, "live data produced no decided games — parser may be stale"
+    if unreadable and len(unreadable) == len(files):
+        pytest.skip(
+            f"all {len(files)} pairing file(s) are unreadable — on OneDrive this "
+            "means cloud-only placeholders. Mark the data folder 'Always keep on "
+            "this device' to run this test."
+        )
+
+    assert decided > 0, (
+        "live data produced no decided games — parser may be stale"
+        + (f" ({len(unreadable)} of {len(files)} files were unreadable)"
+           if unreadable else "")
+    )
 
     # Every matchup win rate from real data stays in range, and the decided-games
     # denominator never undercounts one side's wins.

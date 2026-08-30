@@ -41,7 +41,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
 # characters in deck and player names. Force UTF-8 where the stream supports it.
@@ -52,6 +52,12 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Importable no matter where this is run from — the scheduled task and the
+# by-hand run don't share a working directory.
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+import mtg_era  # noqa: E402  (needs SCRIPT_DIR on sys.path first)
 # Data is read from MTG_DATA_DIR (defaults to the script folder so the flat
 # single-format workflow is unchanged). setup.py points it at a per-format folder.
 DATA_DIR = os.environ.get("MTG_DATA_DIR", SCRIPT_DIR)
@@ -86,6 +92,17 @@ def current_set():
         sys.exit("set_releases.json has no sets with release dates.")
     sets.sort(key=lambda s: s["release_date"])
     return sets[-1]
+
+
+def current_era():
+    """The era this snapshot belongs to (see mtg_era.py).
+
+    A ban opens a new era, and a new era means a new baseline file. Mixing
+    pre-ban and post-ban snapshots in one snapshots[] array would make the
+    run-over-run delta meaningless the week a ban lands — the decks in the
+    previous entry no longer exist."""
+    fmt = os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard"
+    return mtg_era.resolve_era(fmt=fmt)
 
 
 def load_standings():
@@ -148,12 +165,14 @@ def week_monday(d):
     return d - timedelta(days=d.weekday())
 
 
-def write_weekly_md(md_dir, snap, baseline, set_name):
+def write_weekly_md(md_dir, snap, baseline, set_name, era=None):
     """Append this snapshot to the current week's markdown note.
 
     One file per ISO week; every run that week appends a dated section to the
     same file. Delta column compares against the snapshot immediately before
-    this one in the baseline (run-over-run)."""
+    this one in the baseline (run-over-run) — and because a ban starts a new
+    baseline file, the first run of a new era shows every deck as "new" rather
+    than a fake delta against decks that got banned out of the format."""
     snap_date = date.fromisoformat(snap["date"])
     monday = week_monday(snap_date)
     os.makedirs(md_dir, exist_ok=True)
@@ -171,12 +190,14 @@ def write_weekly_md(md_dir, snap, baseline, set_name):
             "project: MTG Tournament Analysis Skill",
             f"week_of: {monday.isoformat()}",
             f"set: {set_name}",
+            f"era: {era['slug'] if era else set_name}",
             "tags: [mtg, meta, snapshot]",
             "---",
             "",
             f"# Meta snapshot, week of {monday.isoformat()}",
             "",
-            f"Set: {set_name}. One section per scrape run; share deltas are vs the previous run.",
+            f"Set: {set_name}. Era: {era['label'] if era else set_name}.",
+            "One section per scrape run; share deltas are vs the previous run in this era.",
         ]
 
     top = sorted(snap["archetypes"].items(), key=lambda kv: -kv[1]["player_count"])[:12]
@@ -204,6 +225,39 @@ def write_weekly_md(md_dir, snap, baseline, set_name):
     print(f"Weekly note: appended to {os.path.basename(path)}")
 
 
+def validation_status(era):
+    """
+    Return a reason string when the pool isn't safe to snapshot, else None.
+
+    Three ways this fails: the validator has never run, it ran against a
+    different era than the one we're about to label, or the pool has been
+    rescraped since it last ran.
+    """
+    report_path = os.path.join(DATA_DIR, f"event_quarantine_{_FMT_SLUG}.json")
+    if not os.path.isfile(report_path):
+        return "the event pool has never been validated (no event_quarantine file)"
+    try:
+        with open(report_path, encoding="utf-8") as f:
+            report = json.load(f)
+    except (OSError, ValueError):
+        return "the event_quarantine file could not be read"
+
+    if report.get("window_start") != era["start_str"]:
+        return (f"the pool was validated for a window starting "
+                f"{report.get('window_start')}, but the current era starts "
+                f"{era['start_str']}")
+
+    if os.path.isfile(STANDINGS):
+        try:
+            validated_at = datetime.fromisoformat(report["validated"]).timestamp()
+            if os.path.getmtime(STANDINGS) > validated_at + 1:
+                return "the standings file has been rescraped since the last validation"
+        except (OSError, ValueError, KeyError, TypeError):
+            return "the validation timestamp could not be compared to the standings file"
+
+    return None
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--label", required=True, help='Snapshot label, e.g. "Week 7 — post-Spotlight"')
@@ -211,15 +265,35 @@ def main():
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--md-dir", default=None,
                    help="Folder for the weekly markdown snapshot notes (skip if omitted)")
+    p.add_argument("--skip-validation-check", action="store_true",
+                   help="Write a snapshot from an unvalidated pool. Not recommended.")
     args = p.parse_args()
 
     cs = current_set()
-    baseline_path = os.path.join(BASELINE_DIR, f"meta_baseline_{slugify(cs['name'])}.json")
+    era = current_era()
+
+    if not args.skip_validation_check:
+        stale = validation_status(era)
+        if stale:
+            print(f"\nRefusing to write a snapshot: {stale}")
+            print("  Run:  python validate_events.py")
+            print("  Then re-run this. On 2026-08-27 an unvalidated pool produced a "
+                  '"post-ban era" snapshot reporting decks that had been banned 17 days '
+                  "earlier — the check exists to stop that reaching a note.")
+            print("  To override anyway: --skip-validation-check")
+            sys.exit(1)
+    # Era slug, not set slug. For a set-only era the two are the same string, so
+    # baselines written before eras existed keep their filename and keep meaning
+    # the pre-ban stretch they actually cover.
+    baseline_path = os.path.join(BASELINE_DIR, f"meta_baseline_{era['slug']}.json")
 
     rows = load_standings()
     snap, tournaments = build_snapshot(rows, args.date, args.label)
+    snap["era"] = era["slug"]
+    snap["era_start"] = era["start_str"]
 
     print(f"Set: {cs['name']} (released {cs['release_date']})")
+    print(f"Era: {era['label']} — data from {era['start_str']} onward")
     print(f"Standings rows: {len(rows)} | events: {snap['events_covered']} | "
           f"players with deck: {snap['total_players_with_deck']}")
     top = sorted(snap["archetypes"].items(), key=lambda kv: -kv[1]["player_count"])[:10]
@@ -237,8 +311,14 @@ def main():
             baseline = json.load(f)
     else:
         baseline = {"set_name": cs["name"], "set_release": cs["release_date"],
+                    "era": era["slug"], "era_label": era["label"],
+                    "era_start": era["start_str"], "era_anchor": era["anchor"],
+                    "era_reason": era["reason"],
                     "tournament_names": [], "notes": "", "snapshots": [],
                     "event_top8s": {}, "matchups": {}}
+        if era.get("ban"):
+            baseline["ban"] = {k: era["ban"].get(k) for k in
+                               ("effective", "banned", "restricted", "decks_hit", "url")}
 
     if any(s.get("date") == args.date for s in baseline.get("snapshots", [])):
         print(f"\nA snapshot dated {args.date} already exists — not appending. "
@@ -254,7 +334,7 @@ def main():
     print(f"\nAppended snapshot '{args.label}' ({args.date}) to {os.path.basename(baseline_path)}")
 
     if args.md_dir:
-        write_weekly_md(args.md_dir, snap, baseline, cs["name"])
+        write_weekly_md(args.md_dir, snap, baseline, cs["name"], era)
 
 
 if __name__ == "__main__":

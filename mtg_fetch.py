@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-mtg_fetch.py — find tournaments on melee.gg since the latest set release.
+mtg_fetch.py — find tournaments on melee.gg since the current era started.
 
 The format defaults to Standard; change it in mtg_config.json or with --format.
-For Standard, the search window starts at the most recent set release date in
-set_releases.json. For other formats it goes back 'weeks_window' weeks (default 8).
+The search window opens at the start of the current format era: the later of
+the newest set release (set_releases.json) and the newest B&R announcement for
+this format (bans.json). See mtg_era.py. Formats with neither fall back to
+'weeks_window' weeks (default 8).
 
 Usage:
-    python mtg_fetch.py                       # Standard since latest set release
+    python mtg_fetch.py                       # Standard since the era started
     python mtg_fetch.py --format Modern       # Modern instead of Standard
     python mtg_fetch.py --fetch-sets          # update set_releases.json from WotC, then run
     python mtg_fetch.py --since 2026-03-07    # override window start manually
@@ -33,6 +35,7 @@ from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 from mtg_paths import resolve_data_dir, resolve_output_dir
+import mtg_era
 
 # Scheduled-task console is cp1252; box-drawing chars in prints crash it.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -155,40 +158,29 @@ def load_config():
 def get_window_start(since_override=None, fmt="Standard", weeks_window=8):
     """
     Returns the datetime to use as the search window start.
+
+    The window opens at the start of the current format era, which mtg_era.py
+    resolves as whichever came last: the newest set release (set_releases.json)
+    or the newest B&R announcement for this format (bans.json). A ban ends an
+    era the same way a rotation does — the decks that defined the old numbers
+    are gone, so the results before it belong to a different format.
+
     Priority:
       1. --since override from CLI
-      2. For Standard: most recent entry with a date in set_releases.json
-         For non-Standard: weeks_window weeks ago (set rotation doesn't apply)
-      3. Fallback: 12 weeks ago
+      2. Era start: latest set release or latest ban, whichever is later
+      3. Non-Standard with no recent ban: weeks_window weeks ago
+      4. Fallback: 12 weeks ago
     """
-    if since_override:
-        dt = parse_date(since_override)
-        if dt:
-            print(f"  Window start: {dt.strftime('%Y-%m-%d')} (--since override)")
-            return dt
-
-    # Non-Standard formats have no set-rotation anchor — use a rolling window.
-    if fmt.lower() != "standard":
-        start = datetime.now() - timedelta(weeks=weeks_window)
-        print(f"  Window start: {weeks_window} weeks ago ({fmt} — using weeks_window from config)")
-        return start
-
-    sets = load_set_releases()
-    dated = []
-    for s in sets:
-        dt = parse_date(s.get("release_date", ""))
-        if dt:
-            dated.append((dt, s["name"]))
-
-    if dated:
-        latest_dt, latest_name = max(dated, key=lambda x: x[0])
-        print(f"  Window start: {latest_name} release ({latest_dt.strftime('%Y-%m-%d')})")
-        return latest_dt
-
-    fallback = datetime.now() - timedelta(weeks=12)
-    print(f"  set_releases.json has no dates — falling back to 12 weeks ago.")
-    print(f"  Run: python mtg_fetch.py --fetch-sets   to auto-populate from WotC.")
-    return fallback
+    era = mtg_era.resolve_era(fmt=fmt, weeks_window=weeks_window,
+                              since_override=since_override)
+    print(f"  Window start: {era['start_str']} — {era['label']}")
+    print(f"  Why: {era['reason']}")
+    if era["anchor"] == "ban":
+        print(f"  Pre-{era['start_str']} results are a different era. Archive them "
+              f"with: python archive_era.py")
+    elif era["anchor"] == "fallback":
+        print(f"  Run: python mtg_fetch.py --fetch-sets   to auto-populate from WotC.")
+    return era["start"]
 
 
 def fetch_set_dates_from_wotc(page):
@@ -426,6 +418,7 @@ def find_tournaments(page, since_dt, fmt="Standard", debug=False, dump=False):
     captured, captured_all, request_bodies = setup_capture(page, debug=debug, dump=dump)
     found = []
     seen = set()
+    undated = []
 
     # ── Step 1: load with URL filter params ───────────────────────────────────
     # Order descending by start date so recently-played events surface first.
@@ -499,18 +492,20 @@ def find_tournaments(page, since_dt, fmt="Standard", debug=False, dump=False):
             found, seen = _extract_from_api(
                 [{"url": list_url, "data": {"data": paged_rows}}],
                 None, cutoff, found, seen, debug=debug,
+                target_fmt=fmt, undated=undated,
             )
     else:
         print("  Could not identify the list endpoint from captures — "
               "relying on captured responses + DOM fallback.")
 
     # ── Step 3b: also parse whatever responses were captured during load ──────
-    found, seen = _extract_from_api(captured, None, cutoff, found, seen, debug=debug)
+    found, seen = _extract_from_api(captured, None, cutoff, found, seen, debug=debug,
+                                    target_fmt=fmt, undated=undated)
 
     # ── Step 4: fallback — extract tournament IDs from DOM links ──────────────
     if not found:
         print("  No API responses captured — falling back to DOM link extraction...")
-        found, seen = _extract_from_dom(page, cutoff, found, seen, debug=debug)
+        found, seen = _extract_from_dom(page, cutoff, found, seen, debug=debug, undated=undated)
 
     if dump:
         import json as _json
@@ -522,6 +517,16 @@ def find_tournaments(page, since_dt, fmt="Standard", debug=False, dump=False):
             f.write(page.content())
         print(f"  Saved: melee_tournaments_network.json ({len(captured_all)} requests)")
         print(f"  Saved: melee_tournaments_page.html")
+
+    if undated:
+        print(f"\n  Skipped {len(undated)} event(s) melee returned with no usable date:")
+        for tid, name in undated[:12]:
+            print(f"    {tid}  {name[:52]}")
+        if len(undated) > 12:
+            print(f"    ...and {len(undated) - 12} more")
+        print("  An event we can't date can't be placed in an era. To pull one anyway:")
+        print(f"    python melee_scraper.py {' '.join(t for t, _ in undated[:6])}")
+        print("  then re-run validate_events.py before trusting it.")
 
     return found
 
@@ -561,8 +566,16 @@ def _try_ui_filters(page, fmt="Standard", debug=False):
             continue
 
 
-def _extract_from_api(captured, weeks, cutoff, found, seen, debug=False):
-    """Parse tournament data from captured JSON API responses."""
+def _extract_from_api(captured, weeks, cutoff, found, seen, debug=False,
+                      target_fmt="Standard", undated=None):
+    """Parse tournament data from captured JSON API responses.
+
+    target_fmt gates the format column. undated collects (id, name) for rows
+    melee returned with no usable date — those are skipped, not admitted, and
+    reported at the end of the run so they can be scraped by hand if wanted.
+    """
+    if undated is None:
+        undated = []
     for item in captured:
         url  = item["url"]
         data = item["data"]
@@ -598,9 +611,19 @@ def _extract_from_api(captured, weeks, cutoff, found, seen, debug=False):
             if not tid or tid in seen:
                 continue
 
-            # Format filter — must be Standard (or unknown)
-            fmt = str(row.get("Format", row.get("GameDescription", row.get("format", "")))).lower()
-            if fmt and "standard" not in fmt and "magic" not in fmt:
+            # Format filter — must name the target format.
+            #
+            # This used to accept any value containing "magic", which passes
+            # every MTG event of every format because GameDescription is
+            # "MagicTheGathering" on all of them. That's how a Modern team
+            # trios event ended up in the Standard pool on 2026-08-27.
+            # GameDescription is the game, not the format, so read the format
+            # fields only and ignore it.
+            fmt_val = str(row.get("Format", row.get("format",
+                         row.get("FormatDescription", "")))).strip().lower()
+            if fmt_val and target_fmt.lower() not in fmt_val:
+                if debug:
+                    print(f"  [api] skip {tid} — format={fmt_val!r}, want {target_fmt!r}")
                 continue
 
             # Status filter — must be Ended. melee.gg returns Status like
@@ -611,19 +634,30 @@ def _extract_from_api(captured, weeks, cutoff, found, seen, debug=False):
                     print(f"  [api] skip {tid} — status={status!r}")
                 continue
 
-            # Date filter — must be before today (completed events only)
+            # Date filter — fail closed.
+            #
+            # Every one of these filters used to sit behind `if date_val`, so a
+            # row melee returned with no usable date skipped the window check
+            # entirely and was admitted. On 2026-08-27 melee returned no date
+            # for all 35 rows, and pre-ban events sailed past a window start
+            # the run had just printed. An event we can't date is an event we
+            # can't place in an era, so it doesn't go in the pool.
             date_val = (row.get("StartDate") or row.get("Date") or
                         row.get("DateCreated") or row.get("date", ""))
-            if date_val:
-                dt = parse_date(str(date_val))
-                if dt and dt > datetime.now():
-                    continue
-                if weeks is not None and not within_weeks(str(date_val), weeks):
-                    continue
-            if cutoff and date_val:
-                dt = parse_date(str(date_val))
-                if dt and dt < cutoff:
-                    continue
+            dt = parse_date(str(date_val)) if date_val else None
+            if dt is None:
+                undated.append((tid, str(row.get("Name") or row.get("TournamentName") or "")))
+                if debug:
+                    print(f"  [api] skip {tid} — no parseable date (raw={date_val!r})")
+                continue
+            if dt > datetime.now():
+                continue
+            if weeks is not None and not within_weeks(str(date_val), weeks):
+                continue
+            if cutoff and dt < cutoff:
+                if debug:
+                    print(f"  [api] skip {tid} — {dt.date()} is before window start {cutoff.date()}")
+                continue
 
             # Player count filter
             players = row.get("Players", row.get("PlayerCount", row.get("players", 0)))
@@ -643,7 +677,7 @@ def _extract_from_api(captured, weeks, cutoff, found, seen, debug=False):
     return found, seen
 
 
-def _extract_from_dom(page, cutoff, found, seen, debug=False):
+def _extract_from_dom(page, cutoff, found, seen, debug=False, undated=None):
     """
     Extract tournament IDs from the melee.gg table.
     Each row: Date | Name (link) | Game | Organizer | Status | Reg Type | Entry Fee | Players | Tags
@@ -652,6 +686,8 @@ def _extract_from_dom(page, cutoff, found, seen, debug=False):
     to scrape. melee.gg ignores the &statuses=Ended URL parameter, so we filter
     here instead. Future-dated and in-progress events are dropped.
     """
+    if undated is None:
+        undated = []
     try:
         links = page.locator("a[href*='/Tournament/View/']").all()
     except Exception:
@@ -700,20 +736,22 @@ def _extract_from_dom(page, cutoff, found, seen, debug=False):
                 r'|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4}\b',
                 row_text, re.IGNORECASE
             )
-            # Belt-and-braces: also skip if every parsed date is in the future
-            # (catches Ended-tagged rows for events that haven't played yet)
-            if date_matches:
-                parsed = [parse_date(d) for d in date_matches]
-                parsed = [p for p in parsed if p]
-                if parsed and all(p > datetime.now() for p in parsed):
-                    if debug:
-                        print(f"  [dom] skip {tid} — all dates in future  {name[:40]}")
-                    continue
-                # And skip if every parsed date is before the set-release cutoff
-                if cutoff and parsed and all(p < cutoff for p in parsed):
-                    if debug:
-                        print(f"  [dom] skip {tid} — before cutoff  {name[:40]}")
-                    continue
+            # Fail closed, same as the API path: a row whose date we can't read
+            # can't be placed in an era, so it doesn't go in the pool.
+            parsed = [p for p in (parse_date(d) for d in date_matches) if p]
+            if not parsed:
+                undated.append((tid, name[:60]))
+                if debug:
+                    print(f"  [dom] skip {tid} — no parseable date  {name[:40]}")
+                continue
+            if all(p > datetime.now() for p in parsed):
+                if debug:
+                    print(f"  [dom] skip {tid} — all dates in future  {name[:40]}")
+                continue
+            if cutoff and all(p < cutoff for p in parsed):
+                if debug:
+                    print(f"  [dom] skip {tid} — before cutoff  {name[:40]}")
+                continue
 
             # Player count filter — look for a standalone number in the Players column.
             # Strip the date column(s) first so a 4-digit year can't be misread as a
@@ -756,6 +794,8 @@ def main():
     parser.add_argument("--format",      default=None,
                         help="Format to scrape (e.g. Standard, Modern, Pioneer). "
                              "Overrides mtg_config.json.")
+    parser.add_argument("--no-validate", action="store_true",
+                        help="Skip the post-scrape event check. Not recommended.")
     args = parser.parse_args()
 
     config = load_config()
@@ -821,12 +861,62 @@ def main():
         env=env,
     )
 
-    if result.returncode == 0:
-        print(f"\nDone. Combined data is in melee_{fmt.lower()}_all_pairings.csv "
-              f"(in {env['MTG_DATA_DIR']}).")
-    else:
+    if result.returncode != 0:
         print("\nScraper hit errors — check output above.")
         sys.exit(result.returncode)
+
+    print(f"\nDone. Combined data is in melee_{fmt.lower()}_all_pairings.csv "
+          f"(in {env['MTG_DATA_DIR']}).")
+
+    if args.no_validate:
+        print("\n--no-validate: skipping the event check. The pool may contain "
+              "off-format or pre-era events.")
+        return
+
+    # ── Validate before anything downstream reads this ────────────────────────
+    # The window filters above trust melee's metadata. This pass trusts the
+    # cards instead, and quarantines anything that doesn't belong. Exit code 2
+    # means it removed something, which is a normal outcome, not a failure.
+    print(f"\n{'─' * 50}")
+    print("Validating scraped events...")
+    validator = os.path.join(SCRIPT_DIR, "validate_events.py")
+    if not os.path.isfile(validator):
+        print("  validate_events.py not found — skipping. Off-format and "
+              "pre-era events will NOT be caught.")
+        return
+    vres = subprocess.run(
+        [sys.executable, validator, "--format", fmt],
+        cwd=SCRIPT_DIR,
+        env=env,
+    )
+    if vres.returncode == 2:
+        print("\nSome events were quarantined. The combined CSVs have been "
+              "rewritten without them; originals are in *.raw.csv.")
+    elif vres.returncode not in (0, 2):
+        print("\nValidation could not run. Treat the combined CSVs as unverified "
+              "until it does.")
+        sys.exit(vres.returncode)
+
+    # ── Reapply human deck-label rulings ──────────────────────────────────────
+    # A scrape refetches decklists and overwrites their archetype with whatever
+    # the classifier says, which used to silently undo every correction made by
+    # hand. The overrides file survives that; this puts it back.
+    corrections = os.path.join(SCRIPT_DIR, "apply_corrections.py")
+    if os.path.isfile(corrections):
+        print(f"\n{'─' * 50}")
+        print("Reapplying deck-label corrections...")
+        subprocess.run([sys.executable, corrections, "--format", fmt, "--reapply"],
+                       cwd=SCRIPT_DIR, env=env)
+
+    # ── Audit the references ──────────────────────────────────────────────────
+    # References are what every live deck gets matched against, so a bad one
+    # renames real decks quietly. Reporting only: a finding here is for a human
+    # to resolve, not something to fix mid-run.
+    auditor = os.path.join(SCRIPT_DIR, "audit_refs.py")
+    if os.path.isfile(auditor):
+        print(f"\n{'─' * 50}")
+        subprocess.run([sys.executable, auditor, "--format", fmt],
+                       cwd=SCRIPT_DIR, env=env)
 
 
 if __name__ == "__main__":

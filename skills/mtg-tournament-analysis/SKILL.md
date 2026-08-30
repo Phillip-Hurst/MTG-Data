@@ -5,9 +5,97 @@ description: Analyze Magic: The Gathering Standard tournament results from melee
 
 # MTG Tournament Analysis
 
-Fetch real tournament data since the most recent set release. Track two kinds of shift: how the meta is maturing within the current set (intra-set drift), and how this set compares to the previous one (cross-set shift). Surface both, and present matchup data clearly.
+## Related skills in this plugin
+
+| Skill | What it's for | Hand off when |
+|---|---|---|
+| `deck-check` | Assigns the right archetype to mislabeled or uncategorized decks, and pushes that label into the win-rate and matchup data | A deck is under the wrong name, an unnamed shell from `card_signal.py` needs naming, or the user wants to clear the mislabel queue |
+
+`mtg-price-check` prices a Moxfield binder against Face to Face Games. It is a separate skill and does not ship in this plugin, so point the user at it by name rather than assuming it is installed.
+
+**This skill does not categorize decks.** When the classifier can't name a deck,
+report the cards that are performing in it and stop. Naming it is `deck-check`'s
+job, and it's the only thing that turns those cards into an archetype with a win
+rate. Say the skill's name and hand over; never reimplement it here.
+
+**Check the pool before quoting a number.** `event_quarantine_<fmt>.json` must
+exist, match the current era, and postdate the last scrape. If it doesn't, say so
+and point at `validate_events.py` rather than reporting the number as fact. On
+2026-08-27 an unvalidated pool produced a snapshot reporting Izzet Prowess at 6.8%
+of a "post-ban" metagame, 17 days after it was banned out of the format. Nothing
+errored.
+
+---
+
+## Card-level signal
+
+Step 3.5 below covers how to *write* about a card once you've found it. `card_signal.py` is how you find it. Run it before writing the "Cards to watch" section — that section should come out of this, not out of impressions.
+
+```bash
+python card_signal.py                       # all four lenses, current era
+python card_signal.py --lens rogue          # just the deckbuilding shortlist
+python card_signal.py --archetype "Mono-Green"   # deviations in one deck
+python card_signal.py --write               # save a note
+```
+
+**rogue** — under 8% of the field is on the card, and the pilots who are finish above average. This is the deckbuilding shortlist: slots you could change tomorrow. Each row names where the card lives, so a rogue inclusion in a known archetype and one in an unnamed shell both surface.
+
+**deviation** — cards in an archetype's lists that aren't in its goto build, ranked by how much better those pilots finished than the rest of the archetype. This is the caster's read made countable: *"we don't see Slickshot Show-Off from Tony's build."* A card filling a flex slot isn't signal; a card several pilots independently reach for, who then beat their own archetype's average, is.
+
+**trend** — adoption moving across the window. A block of cards moving together is one deck moving, not eight discoveries; the outlier moving the other way is usually the better line.
+
+**unnamed** — shells the classifier can't name, grouped by co-occurrence, each a real deck with a real record and no label. Report them as exactly that and hand them to `deck-check`. Don't invent a name here.
+
+Rows marked `*` rest on fewer than 4 pilots. Say so in the write-up rather than
+presenting them as settled — a lead to check, not a conclusion. Verify every card
+on Scryfall before writing it up (Step 0 hard rule).
+
+If more than about a third of the field is unnamed, say so. That means the
+references predate the era, not that the format is unusually brewy.
+
+---
+
+Fetch real tournament data since the current format era started. Track two kinds of shift: how the meta is maturing within the era (intra-era drift), and how this era compares to the one before it (cross-era shift). Surface both, and present matchup data clearly.
 
 The user plays the game. Get to the data.
+
+---
+
+## Format eras: the thing that makes old data lie
+
+An era is the stretch of time over which results are comparable. Two things end one:
+
+1. **A set release.** New cards, new format.
+2. **A banned and restricted announcement.** The top of the metagame gets deleted. Every matchup number that involved the banned deck is now describing a deck that can't be registered.
+
+A ban is the more dangerous of the two, because nothing about the data looks different afterward. The CSVs keep the same filenames, the archetype names stay spelled the same way, and a 62% win rate against Izzet Prowess still reads like a fact. It isn't one, if Izzet Prowess lost its keystone card on Monday.
+
+**Run this before any analysis:**
+
+```
+python mtg_era.py
+```
+
+It prints the current era, the date it started, why it started there, and what the previous era was. The window start comes from whichever is later: the newest set release in `set_releases.json`, or the newest B&R announcement for this format in `bans.json`. `mtg_fetch.py` and `build_baseline.py` both anchor on it.
+
+**Current Standard era: post-ban, 2026-08-10 onward.** Badgermole Cub, Stormchaser's Talent, and Gran-Gran are banned. Selesnya Offense, Izzet Prowess, and Jeskai Lessons are the decks that lost a card. Anything from before that date is a different format.
+
+### When a ban lands
+
+1. Add the announcement to `bans.json` (effective date, format, cards, decks hit, the WotC URL).
+2. `python archive_era.py --dry-run`, then `python archive_era.py`. That moves every scraped CSV, the MTGO dumps, and the closing era's baseline into `archive/through-YYYY-MM-DD/` with a manifest. The analysis scripts glob the data folder non-recursively, so this is what actually takes the old data out of the live pool.
+3. `python mtg_fetch.py`. The window now opens at the ban date, so the new scrape only pulls post-ban events.
+4. Freeze the archetype files: rename the live `## Matchup data` heading to `## Matchup data (pre-ban, through YYYY-MM-DD)` and add a ban banner to every deck that ran a banned card. Don't delete anything.
+
+### Reading data from the archive
+
+The frozen files stay readable. Use them for cross-era comparison and for questions about how the format used to look. Never merge them into live win-rate or matchup numbers, and always label them with the era they came from. `archive/*/manifest.json` carries the era label, the closing date, the ban, and the row counts.
+
+### The first weeks of a new era
+
+Post-ban data is thin by definition. Say so. One weekend of MTGO Challenges after a ban is a real signal about what people are trying, and a weak signal about what's good. The honest framing is "here's what showed up, here's how little of it there is," not a tier list built on 40 matches.
+
+Until there are enough post-ban events to stand on their own, lean on three things and label each one: the ban announcement's own reasoning (WotC publishes what they think the format looked like), mtgtop8's live meta share, and pre-ban data for the archetypes that *didn't* lose a card, flagged as pre-ban.
 
 ---
 
@@ -34,6 +122,10 @@ Local data lives wherever `setup.py` put it — read `mtg_workspace.json` at the
 Fetch `https://magic.wizards.com/en/formats/standard` first, every time.
 
 Note which sets are currently legal, the release date of the most recent set, and anything listed as "Coming Soon" (not yet legal). Every card reference in the analysis must come from a currently legal set. If a card is from a set outside your training coverage, say so — don't guess.
+
+**Then check the ban list.** Fetch `https://magic.wizards.com/en/banned-restricted-list` and compare it against `bans.json`. A legal set is not the same thing as a legal card, and this is the failure mode that produces confident, useless advice: recommending a deck built around a card that got banned. If the live list has a change `bans.json` doesn't, add it before going any further — the window start and the whole data split depend on that file being current.
+
+**Never recommend a banned card.** Currently banned in Standard as of 2026-08-10: Badgermole Cub, Stormchaser's Talent, Gran-Gran. If a decklist in the data or in a vault note runs one of those, that list is a historical artifact. Say so.
 
 ### Hard rule: verify every card before recommending around it
 
@@ -167,13 +259,13 @@ Filter out small locals and casual store events (fewer than ~30 players). MTGO l
 
 The analysis uses three windows.
 
-- **Recent window**: the last 2–3 weeks of current-set events. Run `mtg_fetch.py --since YYYY-MM-DD` where the date is 2–3 weeks ago. This is the live meta — what's winning right now.
-- **Current set window**: everything from the set release date to today. Run `mtg_fetch.py` without flags. This is the full picture of how the meta developed since the format reset.
-- **Prior set baseline**: the saved snapshot from the previous set's era (`baselines/meta_baseline_[set_slug].json`). This is the cross-set reference.
+- **Recent window**: the last 2–3 weeks of current-era events. Run `mtg_fetch.py --since YYYY-MM-DD` where the date is 2–3 weeks ago. This is the live meta — what's winning right now.
+- **Current era window**: everything from the era start to today. Run `mtg_fetch.py` without flags. This is the full picture of how the meta developed since the last reset, whether that reset was a set release or a ban.
+- **Prior era baseline**: the saved snapshot from the era before (`baselines/meta_baseline_[era_slug].json`, or `archive/through-YYYY-MM-DD/baselines/` once it's been frozen). This is the cross-era reference.
 
-`mtg_fetch.py` uses `set_releases.json` to set the window start. The recent window cutoff is a judgment call — use 2 weeks for an active meta, 3 weeks if events have been thin.
+`mtg_fetch.py` gets the window start from `mtg_era.py`, which takes the later of the newest set release and the newest B&R date for the format. The recent window cutoff is a judgment call — use 2 weeks for an active meta, 3 weeks if events have been thin.
 
-If the current set just released (fewer than ~10 events total), don't force a recent-vs-earlier split — there's nothing meaningful to diff yet. Report the full set window only and note the sample size.
+If the era just started (fewer than ~10 events total), don't force a recent-vs-earlier split — there's nothing meaningful to diff yet. Report the full era window only and note the sample size. After a ban this will be the normal state for two or three weeks; say the sample is small rather than dressing it up.
 
 ---
 
@@ -194,6 +286,8 @@ Tournament data comes from melee.gg directly. Tell the user to run:
 Wait for the user to paste the CSV before proceeding to Step 2. If they paste it, skip straight to matrix building.
 
 **Staleness check (mandatory before using on-disk data):** check the newest event date in the combined pairings file (`melee_<format>_all_pairings.csv`, e.g. `melee_standard_all_pairings.csv`) and the `date` fields in `mtgo_*_latest.json` before treating them as current. If the newest data is older than the recent window, say so plainly ("local data ends YYYY-MM-DD") and ask the user to run the fetch scripts rather than presenting old data as the live meta. The scheduled scrape can fail silently — file dates are the only honest signal.
+
+**Era check (also mandatory):** run `python mtg_era.py` and confirm the data folder holds data from *this* era. Right after a ban the folder is empty by design — `archive_era.py` moved the old files out. An empty data folder means "no post-ban data scraped yet," not "no data exists." Say which of those it is. Do not reach into `archive/` to fill the gap and present it as current.
 
 ---
 
@@ -279,9 +373,9 @@ Two layers of analysis, run both every time there's enough data.
 
 ---
 
-### Layer 1: Intra-set drift (recent vs earlier this set)
+### Layer 1: Intra-era drift (recent vs earlier this era)
 
-Compare the **recent window** (last 2–3 weeks) against the **earlier current-set data** (set release to the start of the recent window).
+Compare the **recent window** (last 2–3 weeks) against the **earlier current-era data** (era start to the start of the recent window).
 
 This tells you how the meta is maturing. The field adjusts after week 1 — good players identify what's winning, tech against it, and the meta stabilizes or breaks open again. This layer catches that.
 
@@ -289,23 +383,25 @@ For each archetype: did it rise, fall, or hold? Name the number — "Izzet Eleme
 
 For cards: what moved between the earlier lists and the recent ones? A card appearing more frequently in the recent window is responding to something in the field. Name what.
 
-**Skip this layer if:** the current set has fewer than ~15 total events, or the recent window has fewer than 5 events. Diffing noise against noise isn't useful — just report the full set window and move on.
+**Skip this layer if:** the current era has fewer than ~15 total events, or the recent window has fewer than 5 events. Diffing noise against noise isn't useful — just report the full era window and move on.
 
 ---
 
-### Layer 2: Cross-set shift (current set vs prior set baseline)
+### Layer 2: Cross-era shift (current era vs prior era baseline)
 
-Compare the **full current set window** against the **prior set baseline** (`baselines/meta_baseline_[set_slug].json`).
+Compare the **full current era window** against the **prior era baseline** (`baselines/meta_baseline_[era_slug].json`, or the copy under `archive/through-YYYY-MM-DD/baselines/`).
 
-This tells you what the new card pool actually changed. Some archetypes survive a set rotation mostly intact. Others collapse. New ones emerge. This layer documents that.
+This tells you what actually changed at the break. Some archetypes survive a rotation or a ban mostly intact. Others collapse. New ones emerge. This layer documents that.
 
 For each archetype with data in both windows:
 - Change in meta share (e.g., Dimir Midrange was 7.5% in Strixhaven week 1 and is now 14% at week 6)
 - Change in top 8 representation across comparable event counts
-- Archetypes new to this set — not present in the prior baseline at all
+- Archetypes new to this era — not present in the prior baseline at all
 - Archetypes that dropped out or declined sharply
 
-**If no prior baseline exists** (first set the skill has tracked): skip this layer, label it "no prior baseline available," and note that the Strixhaven baseline is the first reference point.
+**When the break was a ban, name the mechanism.** A deck that fell off a cliff because its 4-of got banned is not a metagame trend, and reporting it as one is misleading. Check `bans.json` for `decks_hit` and separate the two groups: decks that lost cards, and decks whose share moved because the field around them changed. The second group is the interesting one.
+
+**If no prior baseline exists** (first era the skill has tracked): skip this layer, label it "no prior baseline available," and say which baseline is the first reference point.
 
 ---
 
@@ -321,7 +417,7 @@ One pilot's change is noise. The same change across independent lists in the sam
 
 After every analysis session, save a snapshot of the current data to the baseline file. This is what makes Layer 1 work over time.
 
-The baseline file for the current set (`baselines/meta_baseline_[set_slug].json`) holds a `snapshots` array. Append a new entry after each session:
+The baseline file for the current era (`baselines/meta_baseline_[era_slug].json`) holds a `snapshots` array. A ban starts a new file, so a run-over-run delta never straddles a break. Append a new entry after each session:
 
 ```json
 {
@@ -353,7 +449,7 @@ The baseline file for the current set (`baselines/meta_baseline_[set_slug].json`
 
 When running Layer 1, compare the most recent snapshot against the previous one. The `label` field is how you know what kind of events each snapshot covers.
 
-**Re-run `build_baseline.py`** (in `Skills/mtg-tournament-analysis/`, next to the scrapers) after any major scrape. It reads the combined standings file (`melee_<format>_all_standings.csv`) and appends a new snapshot entry to the current set's baseline file.
+**Re-run `build_baseline.py`** (in `Skills/mtg-tournament-analysis/`, next to the scrapers) after any major scrape. It reads the combined standings file (`melee_<format>_all_standings.csv`) and appends a new snapshot entry to the current era's baseline file, stamping each snapshot with its era slug and start date.
 
 ### Goto-list baseline check
 
@@ -419,8 +515,10 @@ After any session that produces matchup data, update the archetype files in `02 
 ### For each archetype with new matchup data:
 
 1. **Find the file** — `[C] {Archetype Name}.md` in the Archetypes folder.
-2. **Update or add the `## Matchup data` section.** If it already exists, replace it entirely. If not, append at the end of the file.
-3. **Update `date:` in the front matter** to today's date.
+2. **Check the era of what's already there.** A heading like `## Matchup data (pre-ban, through 2026-08-10)` is frozen history from a dead format. Never replace it and never merge new numbers into it — add a new `## Matchup data` section for the current era below it.
+3. **Update or add the current-era `## Matchup data` section.** If a current-era section already exists, replace it entirely. If not, append at the end of the file.
+4. **Update `date:` in the front matter** to today's date.
+5. **If the archetype ran a card that got banned**, keep the ban banner at the top of the file. Don't quietly drop it once new data arrives — a rebuilt deck sharing a name with the old one is exactly the case where a reader needs the warning.
 
 Section format (sort by win% descending; flag N < 20 as `* small sample`; omit matchups with N < 10):
 
@@ -523,26 +621,28 @@ Use this structure every time:
 
 ---
 
-**Standard — [Set Name] ([set release date] – [today])**
+**Standard — [Era label] ([era start] – [today])**
+*Era anchor: [set release, or B&R effective DATE — cards banned]*
 *Events covered: [names, types, dates, player counts]*
 *Legal sets as of [date]: [most recent set] through [oldest set]*
+*Banned in Standard: [current ban list]*
 *Snapshots available: [dates of saved snapshots, or "none"]*
-*Prior set baseline: [prior set name, or "none — first run"]*
+*Prior era baseline: [prior era label, or "none — first run"]*
 
 ---
 
-**What's winning (current set window)**
-[2-3 sentences. Archetype names, top 8 counts, over/underperformance vs. meta share.]
+**What's winning (current era window)**
+[2-3 sentences. Archetype names, top 8 counts, over/underperformance vs. meta share. If the era is days old, lead with the sample size instead of the ranking.]
 
 ---
 
-**Intra-set drift — recent vs earlier this set**
-[How the meta has matured since the set dropped. Decks rising or falling, cards moving in or out of lists. Name the numbers. Skip and note "insufficient data" if fewer than ~15 total events or 5 recent events.]
+**Intra-era drift — recent vs earlier this era**
+[How the meta has matured since the era started. Decks rising or falling, cards moving in or out of lists. Name the numbers. Skip and note "insufficient data" if fewer than ~15 total events or 5 recent events.]
 
 ---
 
-**Cross-set shift — [current set] vs [prior set baseline]**
-[What changed with the new card pool vs the previous set. Archetypes that survived, collapsed, or appeared fresh. Name the numbers. Skip and note "no prior baseline" if this is the first tracked set.]
+**Cross-era shift — [current era] vs [prior era baseline]**
+[What changed at the break. Archetypes that survived, collapsed, or appeared fresh. Name the numbers. When the break was a ban, separate decks that lost a card from decks whose share moved on their own. Skip and note "no prior baseline" if this is the first tracked era.]
 
 ---
 
@@ -607,7 +707,7 @@ For feature requests — new data sources, new analysis angles, coverage casters
 
 ## Handling specific requests
 
-**"What should I play?"** — One deck, one reason. Commit.
+**"What should I play?"** — One deck, one reason. Commit. Check it against the current ban list first, and if the era is only days old, commit to the pick but say what it's built on ("two Challenges and the mtgtop8 read, not a season of data").
 
 **A specific event** — Fetch the magic.gg Metagame Mentor article covering that event for win rates and matchup data. For decklists, fetch individual melee.gg Decklist/View links as surfaced in those articles or search results. Do NOT attempt to fetch melee.gg Tournament/View pages expecting round data — they are JS-rendered and return nothing useful. Instead, search mtgdecks.net and MTGGoldfish for that specific event by name to find aggregated player records.
 
