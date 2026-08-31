@@ -20,7 +20,8 @@ Claude reads what they produce.
 | Name this unnamed shell | `deck-check` | Analysis hands it over on purpose |
 | Clear the mislabel queue | `deck-check` | `apply_corrections.py` reads your `Decision:` lines |
 | Why did I lose that game | `vod-review` | Untapped.gg replay, YouTube VOD, or a pasted log |
-| Was that the right line on turn 4 | `vod-review` | It grades decisions against the information you had at the time |
+| Was that the right line on turn 4 | `vod-review` | It grades decisions against the information you had at the time, after asking you what you were thinking |
+| What are my recurring habits, am I rushing | `vod-review` | `play_log.jsonl` and `[C] Play Profile.md` in the insights folder, counted rather than remembered |
 | Does this trigger go on the stack before or after | `rules-check` | The Comprehensive Rules, quoted with the rule number |
 | Can my opponent respond to that | `rules-check` | Priority and the stack, `reference/rules-and-the-stack.md` |
 | What does this card cost, what does it do | any skill, but verify on Scryfall | Hard rule below |
@@ -66,6 +67,7 @@ mtgtop8  ──> build_mtgtop8_baseline.py ──> archetype_refs.json
 | `build_refs_from_melee.py` | `melee_deck_cache.json` |
 | MTGO shares | `mtgo_classifications.json` |
 | `classify_decks.py` | `archetype_refs.json` |
+| `play_profile.py` | `play_log.jsonl`, and it rewrites `[C] Play Profile.md` |
 
 **This table is the whole point.** Fixing data means fixing the file the consumer
 reads, not the one that looks canonical. On 2026-08-29 a correction that reached only
@@ -138,6 +140,7 @@ they'll tell you what you forgot.
 | Reading the format | `skills/mtg-tournament-analysis/SKILL.md` |
 | Fixing labels | `skills/deck-check/SKILL.md` |
 | Reviewing your own games | `skills/vod-review/SKILL.md` |
+| The play ledger, the trend bar, what pace can be measured | `skills/vod-review/reference/play-profile.md` |
 | Rules and the stack | `skills/rules-check/SKILL.md` and its `reference/` |
 | The canonical archetype names | `skills/mtg-tournament-analysis/reference/archetypes/` |
 | Version history | `CHANGELOG.md` |

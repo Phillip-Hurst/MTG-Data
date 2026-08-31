@@ -21,8 +21,8 @@ checkout. It produces a zip whose root is the plugin directory layout:
       README.md, LICENSE
 
 What it deliberately leaves out: scraped data (CSV/JSON the scrapers write),
-run logs, dev and probe scripts, the test suite, transcripts, baselines, and
-the personal vault notes at the repo root.
+run logs, dev and probe scripts, the test suite, transcripts, baselines, the
+personal vault notes at the repo root, and vod-review's play ledger.
 
 Exclusion is decided on the *relative path*, not the bare filename. An earlier
 version tested the filename only, so every .md that was not literally called
@@ -66,6 +66,10 @@ EXCLUDE_FILES = {
     "mtgdecks_fetch.py",   # orphan: Cloudflare-blocked, not referenced in any SKILL.md
     "analyze_weekend.py",  # hardcoded to specific tournament IDs; stays local
     "standings_only_events.json",  # the user's scraped-event registry
+    # vod-review's play ledger. In the flat no-setup workflow
+    # mtg_paths.resolve_output_dir() falls back to the script's own folder, so
+    # this lands at the repo root, and it is a record of someone's own games.
+    "play_log.jsonl",
     # The cached Comprehensive Rules and its version stamp. rules_lookup.py
     # downloads them on first use, so shipping a copy only guarantees a stale
     # one. The .txt is already caught by the suffix rule; the stamp is not, and
@@ -99,6 +103,7 @@ REQUIRED = {
     "rules reference": lambda p: (
         p == Path("skills/rules-check/reference/rules-and-the-stack.md")),
     "rules lookup script": lambda p: p == Path("rules_lookup.py"),
+    "play profile script": lambda p: p == Path("play_profile.py"),
     "archetype notes": lambda p: (
         p.match("skills/mtg-tournament-analysis/reference/archetypes/*.md")
         and p.name != "README.md"
@@ -112,7 +117,7 @@ def should_ship(rel: Path) -> bool:
         return False
     if rel.name in EXCLUDE_FILES:
         return False
-    if rel.name.endswith((".log", ".txt", ".html", ".csv")):
+    if rel.name.endswith((".log", ".txt", ".html", ".csv", ".jsonl")):
         return False
 
     # Everything under skills/ ships, including reference notes.

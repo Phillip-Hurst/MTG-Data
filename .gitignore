@@ -77,6 +77,10 @@ analyze_weekend.py
 #    canonical vocabulary and very much meant to publish.
 /\[C\] *.md
 mtgo_deck_log.md
+# vod-review's play ledger: a record of this user's own games. The flat
+# no-setup workflow resolves the insights folder to the repo root, so without
+# this it lands here and gets committed to a public repo.
+play_log*.jsonl
 melee_win_rate_tracker.md
 standings_only_events.json
 mtg_workspace.json

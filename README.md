@@ -10,7 +10,7 @@ Playwright scrapers run on your machine and pull round-by-round results from mel
 |---|---|
 | `mtg-tournament-analysis` | Reads the format. Meta share, win rates, a colour-coded matchup matrix, what moved week over week, and card-level signal across the field: rogue picks, deviations from an archetype's goto build, adoption trends, and shells nobody has named yet. |
 | `deck-check` | Gets every deck under the right archetype name, and pushes that name into the CSVs the win rates and matchups are actually built from. Reads rulings you mark up in Obsidian, and keeps them across scrapes. |
-| `vod-review` | Reviews your own games from an untapped.gg replay, a YouTube VOD, or a pasted log. Finds the turn the game was actually lost, and judges the line on what you knew at the time rather than on what you drew. |
+| `vod-review` | Reviews your own games from an untapped.gg replay, a YouTube VOD, or a pasted log. Finds the turn the game was actually lost, and judges the line on what you knew at the time rather than on what you drew. Asks what you were thinking before it grades anything, and keeps a running profile of your habits. |
 | `rules-check` | Answers a rules question by quoting the current Comprehensive Rules with the rule number. Priority, the stack, triggers, state-based actions, layers. Never from memory. |
 
 The split between the first two is deliberate. Analysis reports the cards performing in a deck it can't name and stops there; naming it is `deck-check`'s job, and that's the step that turns those cards into an archetype with a win rate.
@@ -194,6 +194,35 @@ python build_baseline.py --label "Week 4, post-Spotlight"
 ```
 
 Reads the standings CSV from `MTG_DATA_DIR` and appends a snapshot to `baselines/meta_baseline_<era_slug>.json`. A ban starts a new baseline file, so a week-over-week delta can't compare live decks against banned ones.
+
+## Your play profile
+
+`vod-review` does two things a one-off review can't. It asks, and it remembers.
+
+**It asks.** Before grading a decision it flagged, it asks what the read was, what you were playing around, and whether a particular card was in the picture. That third question names a real card from the opponent's archetype, either from the shipped archetype note or from `card_signal.py`'s rogue lens for cards the field has started playing that the note hasn't caught up to. It only asks if the deck actually plays the card, the card was live at that moment, and knowing about it changes the line. Otherwise it skips the question, because a manufactured trap teaches you to distrust the review.
+
+The answers move grades, which is why they're collected first. A sound read whose line still lost is graded `correct`, and your answer is what proves it. Naming the right card and then making a play that ignores it is an execution problem rather than a judgement problem, and those need different practice.
+
+**It remembers.** Every finding is appended to `play_log.jsonl`, one object per game, and `play_profile.py` counts it:
+
+```
+python play_profile.py                 # roll up, rewrite the profile note
+python play_profile.py --validate      # check the ledger, write nothing
+python play_profile.py --dry-run       # print the profile, write nothing
+python play_profile.py --json          # the counts, for answering a question
+```
+
+What the counting buys you:
+
+- **A habit needs 3 occurrences across 2 sessions before it's called a trend.** Two occurrences on one night is one bad night, so sessions are counted separately from games. Two go in a Watching section, named and counted with no conclusion drawn.
+- **Every line carries its count and its dates.** "You're impatient with removal" is a vibe. "Spent removal on the first legal target 3 times across 3 sessions, 2 punts and a close, turns 3, 4 and 6" is something you can argue with.
+- **Strengths clear the same bar.** A profile listing only leaks is the default failure of automated review and the reason people stop reading them. A habit that stops appearing moves to Faded with the date last seen, so a fixed leak stays visible as fixed.
+- **Pace is measured or declared unmeasurable.** A YouTube VOD gives real seconds per turn from its timestamps; an untapped replay gives duration over turn count; a pasted log gives nothing and says so. MTGO and Arena logs carry no usable timing and none gets derived. Beyond that there are six proxy tells (tapped the wrong mana, cast before the land drop, missed trigger, and so on): one is noise, two in a game is a signal. Losing is never evidence about speed.
+- **A count that is mostly confirmation says so.** The profile is read at the start of a review and written at the end, which makes it easy to find the habit you expected. Findings are formed from the game first, the profile is checked second, and anything found only on that second pass is flagged. A habit whose count is mostly flagged gets discounted in the note and is never offered as the thing to work on.
+
+`kind` comes from a fixed vocabulary of ten decision types, for the same reason archetype names do: free text splits one habit spelled three ways into three habits. A line using anything else is rejected and reported rather than counted under a name nothing else uses, and the exit code says so (`0` clean, `1` couldn't run, `2` found lines it couldn't use).
+
+**Your ledger and your profile stay on your machine.** They're a record of your own games. `.gitignore` and `package.py` both exclude them, and a test fails if that ever stops being true. The schema and the vocabularies are in [`skills/vod-review/reference/play-profile.md`](skills/vod-review/reference/play-profile.md).
 
 ## Rules lookups
 

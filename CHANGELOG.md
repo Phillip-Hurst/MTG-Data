@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.8.0 - 2026-08-31
+
+`vod-review` asks before it grades, and remembers between sessions.
+
+### It asks what you were thinking
+
+- **New Step 4: the interview.** The review now asks the player about the decisions it flagged before grading any of them, because a review that skips this is guessing at the reasoning and then grading its own guess. Three questions, capped at three per match, batched into one round: what was the read, what were you playing around, and was this card in the picture.
+- **The third question is the one that teaches.** It names a real card from the opponent's archetype (the note's key-cards table, or `card_signal.py`'s rogue and deviation lenses for cards the field has started playing that the note hasn't caught up to) and asks whether it factored in. Three conditions before it can be asked: the archetype actually plays it, it was live at that moment, and knowing about it changes the line. If no card clears all three, the question gets skipped. A manufactured trap teaches the player to distrust the review.
+- **The interview moves grades, which is the point of doing it first.** A sound read whose line still lost is `correct`, and the interview is what proves it. A player who named the right card to play around and then made a play that didn't account for it has an execution problem rather than a judgement problem, and those need different practice.
+- **"I don't remember" is recorded as an answer.** A decision that left no memory of the reasoning behind it is usually a fast one.
+- **Testimony is not evidence.** What the player says goes in the note as their account, and where the account and the line disagree the review says so.
+
+### It builds a play profile
+
+- **New `play_profile.py`.** Reads the ledger, applies the trend bar, and rewrites the profile note. Stdlib only, like `mtg_era.py` and `rules_lookup.py`. `--validate` checks the ledger and writes nothing, `--dry-run` prints the profile it would write, `--json` gives the counts for answering a question straight, and `--min-occurrences` / `--min-sessions` move the bar without touching the counting. Exit codes carry meaning: `0` clean, `1` couldn't run, `2` ran and found ledger lines it couldn't use. **The skill no longer counts by hand**, because counting from memory across a dozen review notes is how a habit list turns back into a vibe.
+- **New `play_log.jsonl` and `[C] Play Profile.md`**, both in the insights folder. The ledger is append-only, one object per game. The profile is generated, never hand-edited: an edit to it is gone on the next run, so corrections go in the ledger line.
+- **`kind` comes from a fixed vocabulary** of ten decision types. This is the whole reason the ledger works: free text can't be counted, and a habit spelled three ways splits into three habits. Same failure the archetype alias table exists to prevent.
+- **The bar for a trend is 3 occurrences across 2 or more sessions.** Two occurrences on one night is one bad night. Two go in a Watching section, named and counted with no conclusion drawn. Every profile line carries its count and its date range, and a line without one gets deleted rather than softened.
+- **Strengths are tracked to the same bar**, and a habit that stops appearing moves to Faded with the date last seen. A profile listing only leaks is the default failure of automated review and the reason players stop reading them.
+- **Pace is measured, not guessed.** A VOD gives real seconds per turn from its timestamps, untapped gives duration over turn count, a pasted log gives nothing and says so. MTGO and Arena logs carry no usable timing and none gets derived. Beyond that there are six proxy tells (tapped the wrong mana, cast before the land drop, missed trigger, and so on): one is noise, two in a game is a signal. **Losing is not evidence about speed.**
+- **The confirmation-bias guard.** The profile is read at the start of a review and written at the end, which makes it easy to find the habit you expected. So findings are formed from the game first, the profile is checked second, and anything found only at that second pass is flagged `prompted_by_profile` in the ledger so its count can be discounted. Where the profile predicts a habit this game doesn't show, the review says that out loud. A profile nothing can contradict has stopped being a measurement.
+- **Asking for the profile with no game attached** ("what are my bad habits", "am I playing too fast") answers straight from the ledger, reports the sample size in the first sentence, and says the sample is thin instead of inventing a profile from four games.
+- Both files stay out of the repo and out of the bundle. They're the user's game history and the repo is public.
+
+### Housekeeping
+
+- **New `skills/vod-review/reference/play-profile.md`**: the ledger schema, the `kind` vocabulary, the pace measures and tells, the trend bar, and the profile note template. Ships under `skills/`, so `package.py` already carries it.
+- **114 tests, up from 77.** `tests/test_play_profile.py` covers one test per rule the profile's credibility rests on, plus the guardrails: a clean game with no findings is valid, an unknown `kind` is rejected rather than counted, one malformed line doesn't take the ledger down and doesn't vanish either, an unreadable ledger is not an empty one (OneDrive raises `OSError` on a cloud-only placeholder that lists fine), the second run is a no-op that leaves no spurious backup, a rewrite backs up the previous note first, a missing ledger exits 1 instead of writing an empty profile, and the module is pure ASCII so a cp1252 Windows console can't die on the reporting step after the work is done. One test asserts the script's vocabularies and the reference note haven't drifted apart, because a comment is not a guard.
+- `package.py` `REQUIRED` gained `play_profile.py`, so a bundle missing it fails the build rather than installing a skill whose Step 7 calls a script that isn't there.
+- `vod-review` now asks which deck you were on and what you were up against before reading the source, rather than inferring both off the log. Step 2 still reads it off the reveals when the player doesn't know.
+- The router table in `CLAUDE.md` gained a row for the habit question.
+- **`package.py` and `.gitignore` now exclude `play_log*.jsonl`, with a test pinning it.** Caught before the ledger existed: `.jsonl` fell through every exclusion rule to `return True`, and in the flat no-setup workflow `mtg_paths.resolve_output_dir` resolves the insights folder to the script's own folder, which is the repo root. So a ledger written by the default install would have been committed to a public repo and shipped in the next bundle. Same shape as the 2026-08-29 archetype-notes bug, opposite direction.
+
 ## 1.7.0 - 2026-08-30
 
 Two new skills, and a router note so a reader knows which of the four to open.
