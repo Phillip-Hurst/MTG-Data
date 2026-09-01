@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.9.0 - 2026-09-01
+
+One profile per deck, a cross-deck layer above them, and a place to put matchup experience without pretending it's data.
+
+### A profile per deck, and a player above the decks
+
+- **`play_profile.py` now writes `[C] Play Profile - {deck}.md` for every deck in the ledger**, alongside the cross-deck `[C] Play Profile.md`. Deck names are sanitised into the filename, so a name with a slash in it can't write outside the insights folder.
+- **A habit seen with one deck is the deck's habit, not the player's.** It could be the archetype, the matchup, or a week of practice. It stays in that deck's note, counted and named, and the cross-deck note lists it under "single-deck so far" rather than claiming it. A second deck showing the same `kind` promotes it: `MIN_DECKS_FOR_PLAYER_HABIT` is 2, on top of the ordinary trend bar. The Trends, Watching and Faded tables in the cross-deck note now hold cross-deck habits only, and every habit row carries the decks it was seen on.
+- **The deck note carries what is specific to that deck**: its habits with the bias-discount and intent-mismatch lines, its matchup record, its boarding, and its kept hands.
+- The confirmation-bias discount and the execution-versus-judgement line moved down to whichever note reports the habit, so a single-deck habit can't lose its caveat on the way.
+
+### Matchup experience, filed as experience
+
+- **New `## Matchups played (personal experience)` in each deck note.** Games reviewed, record, and the sample verdict. **Under 20 games (`MEANINGFUL_MATCHUP_GAMES`) it prints as "anecdote", in that word.** It never prints a win rate: three games cannot support a percentage.
+- **The precedence rule is written into three places** so nothing can quietly forget it: the deck note's own header, `vod-review`'s Step 2, and the archetypes README. **Large-sample tournament data beats personal experience at every sample size.** Where the two disagree, the archetype note's `## Matchup data` table stands and the disagreement is worth a sentence, not an edit.
+- **`vod-review` may append `## Personal experience (small sample, not tournament data)`** to an archetype note, under the matchup table and never inside it, with the sample size in the header and opponent handles left out. Cards and interactions still go in Key cards and Key tricks, because those are facts about the format rather than facts about one night.
+- **`mtg-tournament-analysis` now knows those sections exist and that they are not data.** Its Related-skills section says never to fold them into `## Matchup data`, never to let them move a number, and never to quote them as field evidence.
+
+### Sideboarding is now countable
+
+- **New `sideboard` field on the ledger row**: what came in, what went out, per game. It rolls up per opponent archetype in the deck note, so "this card comes in every matchup and has never mattered" becomes a claim with a count behind it.
+- **Boarding is counted per game, not per copy.** Four copies of one card in one game is one decision, and counting copies would report a four-of as four times the habit of a one-of.
+
+### Honesty fixes
+
+- **A habit whose wordings don't agree is labelled by its kind.** Seven findings written seven different ways, headlined by whichever came first, reads as a much narrower claim than the ledger supports. A single wording only earns the headline when it covers at least half the occurrences.
+- **136 tests, up from 124.** New ones pin the one-deck-versus-two-decks rule, per-deck rollups, the deck-name path guard, the anecdote threshold and its wording, boarding counted per game, and the habit-label rule in both directions.
+
 ## 1.8.1 - 2026-09-01
 
 `vod-review` writes down the hand, and looks up the opponent's cards before it grades.

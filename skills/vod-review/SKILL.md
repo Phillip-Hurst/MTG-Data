@@ -173,12 +173,52 @@ written against a deck you didn't look up.
    Append it to Key cards with its verified text and the date, and say in the review
    that you did. This is the whole reason the notes exist: the next review of that
    matchup starts knowing what this one had to learn the hard way.
+   The same goes for an interaction the note doesn't spell out: it earns a line in
+   **Key tricks and interactions**. Card text and interactions are general facts about
+   the format, so they belong in the shipped note.
 4. **If no archetype note exists for the opponent's deck**, say so plainly and build
    the card list from the reveals alone. Don't fabricate an archetype's contents from
    the name.
 
 The card that decided the game is the same card the interview's third question is
 about, so this step feeds Step 4 directly.
+
+### Writing matchup experience back, without pretending it's data
+
+A reviewed match is one data point about a matchup and a real observation about how it
+plays. Both of those are worth keeping, and they go to different places.
+
+**Card text, interactions, and play patterns go in the archetype note.** They're facts
+about the format and they're true regardless of who was holding the cards.
+
+**Your record in the matchup goes in the deck profile**, where `play_profile.py`
+counts it and labels it. Under 20 games it prints as an anecdote, in that word.
+
+**A short personal-experience section in the archetype note is fine, and it is never
+data.** Append it under the existing matchup table, never inside it, in this shape:
+
+```markdown
+## Personal experience (small sample, not tournament data)
+
+**Sample: 3 games, 1 match, 2026-09-01. On UW Control.** The matchup table above is
+built on a much larger pool and overrides anything here.
+
+- Hydro-Man went the distance in game 3. Sorcery-speed removal never had a legal
+  window and Day of Judgment can't kill him at all.
+- Disdainful Stroke was blank: their board comes down at two and three mana.
+```
+
+Three rules, all of them hard:
+
+- **Never touch the `## Matchup data` table with personal results.** That table is the
+  field's number. `mtg-tournament-analysis` owns it and rebuilds it from CSVs.
+- **Never state a personal win rate.** "1-2 in one match" is a record. "33%" is a
+  claim, and three games can't support one.
+- **Where personal experience and the matchup table disagree, the table wins**, and
+  the note says so in the section header. Large-sample tournament data beats how it
+  felt every time.
+
+Leave opponent handles out. The observation is about the deck, not the person.
 
 ---
 
@@ -443,7 +483,18 @@ from memory across a dozen review notes is how a habit list turns into a vibe.
    because a hand transcribed wrong still gets counted, and the count is the point. A
    game whose source genuinely never showed the opening hand is the only line that
    ships without one, and the review says which game that was.
-2. **Run the rollup.** It reads the ledger and rewrites `[C] Play Profile.md`.
+   **Games two and three carry `sideboard`** — what came in, what went out. That's how
+   "this card comes in every time and has never mattered" becomes a countable claim
+   instead of a feeling.
+2. **Run the rollup.** It reads the ledger and rewrites `[C] Play Profile.md` plus one
+   `[C] Play Profile - {deck}.md` per deck in the ledger.
+
+   **Two layers, on purpose.** The deck note holds that deck's habits, its matchup
+   record, its boarding, and its kept hands. The cross-deck note holds only what has
+   shown up with two or more decks, because a habit seen on one deck might be the
+   archetype rather than the player. When the cross-deck note is thin and the deck
+   notes aren't, that's the system working, not a bug. Say which layer a finding came
+   from when you report it.
 
    ```bash
    python play_profile.py                 # roll up, write the profile
@@ -467,6 +518,9 @@ ledger line.
 
 | Rule | Value |
 |---|---|
+| Deck habit | Clears the trend bar with one deck. Lives in that deck's note only |
+| Player habit | Clears the trend bar **and** appears with 2 or more decks |
+| Personal matchup record | An anecdote under 20 games. Never a win rate, never beats the archetype note's table |
 | Trend | 3 or more occurrences across 2 or more sessions |
 | Watching | Exactly 2 occurrences, counted with no conclusion drawn |
 | Below the bar | 1 occurrence. Stays in the review note, never reaches the profile |

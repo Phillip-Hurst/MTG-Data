@@ -48,6 +48,9 @@ except ImportError:                                    # standalone copy
 LEDGER_NAME = "play_log.jsonl"
 PROFILE_NAME = "[C] Play Profile.md"
 BACKUP_NAME = "[C] Play Profile.pre-rollup.md"
+# One note per deck, plus the cross-deck note above. A habit that only ever
+# happens with one deck is usually the deck talking, not the player.
+DECK_PROFILE_NAME = "[C] Play Profile - %s.md"
 
 # The fixed vocabularies. These are the reason the ledger can be counted at all:
 # free text splits one habit spelled three ways into three habits, which is the
@@ -99,6 +102,15 @@ HAND_OUTCOMES = ("screwed", "flooded", "neither", "unknown")
 # counted separately from games.
 DEFAULT_MIN_OCCURRENCES = 3
 DEFAULT_MIN_SESSIONS = 2
+
+# A habit seen with only one deck is the deck's habit until a second deck shows
+# it. Holding up mana badly in a control mirror says nothing about how someone
+# plays aggro; it might be the archetype, the matchup, or one week of practice.
+MIN_DECKS_FOR_PLAYER_HABIT = 2
+
+# Below this many games, a personal matchup record is an anecdote and the
+# profile says so in those words. Tournament data at any sample beats it.
+MEANINGFUL_MATCHUP_GAMES = 20
 
 # A trend whose last appearance is older than this many of the most recent
 # sessions has gone quiet. It moves to Faded rather than being deleted: someone
@@ -205,6 +217,17 @@ def validate_row(row, line_no):
             if outcome not in HAND_OUTCOMES:
                 bad("hand outcome %r is not in the fixed vocabulary" % (outcome,))
 
+    board = row.get("sideboard")
+    if board is not None:
+        if not isinstance(board, dict):
+            bad("sideboard is not an object")
+        else:
+            for side in ("in", "out"):
+                cards = board.get(side, [])
+                if not isinstance(cards, list) or not all(
+                        isinstance(c, str) and c.strip() for c in cards):
+                    bad("sideboard %r is not a list of card names" % side)
+
     pace = row.get("pace")
     if pace is not None:
         if not isinstance(pace, dict):
@@ -262,6 +285,21 @@ def read_ledger(path):
 
 # ------------------------------------------------------------------- rollup
 
+def _label_for(habits, occurrences, kind):
+    """The habit's display label.
+
+    A single wording is only a fair label when it covers most of what happened
+    under that kind. Seven findings written seven different ways headlined by
+    the first of them reads as a much narrower claim than the ledger supports.
+    """
+    if not habits:
+        return ""
+    wording, count = habits.most_common(1)[0]
+    if occurrences and count * 2 >= occurrences:
+        return wording
+    return "%s decisions (%d wordings)" % (kind, len(habits))
+
+
 def hand_keeps_top(card_keeps, limit=10):
     """Cards that show up most often in hands this player chose to keep.
 
@@ -282,6 +320,7 @@ def roll_up(rows, min_occurrences, min_sessions):
         "occurrences": 0,
         "games": set(),
         "sessions": set(),
+        "decks": set(),
         "grades": Counter(),
         "habits": Counter(),
         "prompted": 0,
@@ -289,6 +328,11 @@ def roll_up(rows, min_occurrences, min_sessions):
         "last_seen": None,
         "turns": [],
     })
+
+    matchups = defaultdict(lambda: {"games": 0, "results": Counter(),
+                                    "dates": set()})
+    boarded_in = defaultdict(Counter)
+    boarded_out = defaultdict(Counter)
 
     decks = Counter()
     opponents = Counter()
@@ -311,12 +355,27 @@ def roll_up(rows, min_occurrences, min_sessions):
         opponents[r["their_deck"]] += 1
         results[r["result"]] += 1
 
+        opp = matchups[r["their_deck"]]
+        opp["games"] += 1
+        opp["results"][r["result"]] += 1
+        opp["dates"].add(r["date"])
+
+        # Counted per game, not per copy. Four copies of one card in one game is
+        # still one boarding decision, and counting copies would report a
+        # four-of as four times the habit of a one-of.
+        board = r.get("sideboard") or {}
+        for card in {c.strip() for c in board.get("in", []) or []}:
+            boarded_in[r["their_deck"]][card] += 1
+        for card in {c.strip() for c in board.get("out", []) or []}:
+            boarded_out[r["their_deck"]][card] += 1
+
         for f in r["findings"]:
             k = by_kind[f["kind"]]
             k["kind"] = f["kind"]
             k["occurrences"] += 1
             k["games"].add(game_key)
             k["sessions"].add(r["date"])
+            k["decks"].add(r["your_deck"])
             k["grades"][f["grade"]] += 1
             k["habits"][f["habit"].strip()] += 1
             k["turns"].append(f["turn"])
@@ -405,8 +464,14 @@ def roll_up(rows, min_occurrences, min_sessions):
             "games": len(k["games"]),
             "sessions": n_sessions,
             "session_dates": sorted(k["sessions"]),
+            "decks": sorted(k["decks"]),
+            "cross_deck": len(k["decks"]) >= MIN_DECKS_FOR_PLAYER_HABIT,
             "grades": dict(k["grades"]),
-            "top_habit": k["habits"].most_common(1)[0][0] if k["habits"] else "",
+            # One wording only earns the label if it accounts for most of the
+            # occurrences. Otherwise the kind is the honest label: seven
+            # different sentences under one heading is not one habit described
+            # seven times, it is a decision type worth watching.
+            "top_habit": _label_for(k["habits"], occurrences, kind),
             "habit_wordings": [h for h, _ in k["habits"].most_common()],
             "prompted_by_profile": k["prompted"],
             "prompted_share": round(prompted_share, 3),
@@ -452,10 +517,27 @@ def roll_up(rows, min_occurrences, min_sessions):
         "index": sorted(hand_rows, key=lambda h: (h["date"], h["game"])),
     }
 
+    matchup_rows = []
+    for opp, v in sorted(matchups.items()):
+        matchup_rows.append({
+            "their_deck": opp,
+            "games": v["games"],
+            "record": "-".join(str(v["results"].get(g, 0)) for g in RESULTS),
+            "wins": v["results"].get("W", 0),
+            "dates": sorted(v["dates"]),
+            "meaningful": v["games"] >= MEANINGFUL_MATCHUP_GAMES,
+            "boarded_in": [{"card": c, "games": n}
+                           for c, n in boarded_in[opp].most_common()],
+            "boarded_out": [{"card": c, "games": n}
+                            for c, n in boarded_out[opp].most_common()],
+        })
+    matchup_rows.sort(key=lambda m: (-m["games"], m["their_deck"]))
+
     return {
         "games": total_games,
         "rows": len(rows),
         "hands": hands,
+        "matchups": matchup_rows,
         "sessions": len(sessions),
         "session_dates": sessions,
         "first_date": sessions[0] if sessions else None,
@@ -477,23 +559,193 @@ def _grade_split(grades):
     return ", ".join("%d %s" % (grades[g], g) for g in order) or "none"
 
 
-def _table(rollup, buckets):
+def _table(rollup, buckets, cross_deck_only=False):
     rows = [h for h in rollup["habits"] if h["bucket"] in buckets]
+    if cross_deck_only:
+        rows = [h for h in rows if h["cross_deck"]]
     if not rows:
         return None
-    out = ["| Habit | Kind | Count | Sessions | Grade split | Last seen |",
-           "|---|---|---|---|---|---|"]
+    out = ["| Habit | Kind | Count | Sessions | Decks | Grade split | Last seen |",
+           "|---|---|---|---|---|---|---|"]
     for h in rows:
-        out.append("| %s | %s | %d in %d game(s) | %d | %s | %s |" % (
+        out.append("| %s | %s | %d in %d game(s) | %d | %s | %s | %s |" % (
             h["top_habit"] or "(unnamed)",
             h["kind"],
             h["occurrences"],
             h["games"],
             h["sessions"],
+            ", ".join(h["decks"]) or "unknown",
             _grade_split(h["grades"]),
             h["last_seen"] or "unknown",
         ))
     return "\n".join(out)
+
+
+def deck_filename(deck):
+    """The per-deck profile's filename. ASCII, no path separators.
+
+    Deck names come from the ledger, which comes from a review, which takes them
+    from the user. A name with a slash in it would otherwise write outside the
+    insights folder.
+    """
+    safe = "".join(c if (c.isalnum() or c in " -_") else "-" for c in deck)
+    safe = " ".join(safe.split()) or "Unnamed Deck"
+    return DECK_PROFILE_NAME % safe
+
+
+def roll_up_by_deck(rows, min_occurrences, min_sessions):
+    """One rollup per deck, keyed by deck name.
+
+    Counting each deck separately is what makes the cross-deck layer mean
+    anything: a habit that only ever shows up on one deck is that deck's habit
+    until a second deck shows it too.
+    """
+    by_deck = defaultdict(list)
+    for r in rows:
+        by_deck[r["your_deck"]].append(r)
+    return {
+        deck: roll_up(deck_rows, min_occurrences, min_sessions)
+        for deck, deck_rows in sorted(by_deck.items())
+    }
+
+
+def _matchup_section(rollup, lines):
+    """Personal matchup record. Never a win rate, and never called data."""
+    lines += ["## Matchups played (personal experience)", ""]
+    matchups = rollup["matchups"]
+    if not matchups:
+        lines += ["Nothing reviewed yet.", ""]
+        return
+    lines += ["This is a record of games reviewed here, not tournament data. "
+              "Where it disagrees with the matchup table in an archetype note, "
+              "**the archetype note wins**: it is built on hundreds of matches "
+              "and this is built on a handful. Under %d games a line here is an "
+              "anecdote, and it is labelled as one."
+              % MEANINGFUL_MATCHUP_GAMES, ""]
+    lines += ["| Opponent | Games | Record (W-L-D) | Sample | Last played |",
+              "|---|---|---|---|---|"]
+    for m in matchups:
+        lines.append("| %s | %d | %s | %s | %s |" % (
+            m["their_deck"], m["games"], m["record"],
+            "worth reading" if m["meaningful"] else "anecdote",
+            m["dates"][-1] if m["dates"] else "unknown"))
+    lines.append("")
+
+
+def _sideboard_section(rollup, lines):
+    lines += ["## Sideboarding", ""]
+    boarded = [m for m in rollup["matchups"]
+               if m["boarded_in"] or m["boarded_out"]]
+    if not boarded:
+        lines += ["No boarding recorded yet. Reviews log what came in and what "
+                  "went out for games two and three.", ""]
+        return
+    for m in boarded:
+        ins = ", ".join("%s (%d)" % (c["card"], c["games"])
+                        for c in m["boarded_in"]) or "nothing recorded"
+        outs = ", ".join("%s (%d)" % (c["card"], c["games"])
+                         for c in m["boarded_out"]) or "nothing recorded"
+        lines += ["**vs %s** (%d game(s), %s)" % (m["their_deck"], m["games"],
+                                                  m["record"]), "",
+                  "- In: %s" % ins,
+                  "- Out: %s" % outs, ""]
+
+
+def render_deck_profile(deck, rollup, problems, today=None):
+    """The note for one deck. Habits here may be the deck rather than the player.
+
+    The cross-deck note is where a habit gets promoted to something about how
+    this person plays, and only after a second deck shows it.
+    """
+    today = today or date.today().isoformat()
+    lines = [
+        "---",
+        "author: claude",
+        "type: solution",
+        "project: MTG Tournament Analysis Skill",
+        "date: %s" % today,
+        "tags: [mtg, vod-review, play-profile, deck-profile]",
+        "deck: %s" % deck,
+        "games_reviewed: %d" % rollup["games"],
+        "range: %s to %s" % (rollup["first_date"] or "n/a",
+                             rollup["last_date"] or "n/a"),
+        "generated_by: play_profile.py",
+        "---",
+        "",
+        "# Play profile: %s" % deck,
+        "",
+    ]
+
+    record = "-".join(str(rollup["results"].get(g, 0)) for g in RESULTS)
+    lines += [
+        "**%d game(s) across %d session(s), %s to %s.** Record %s (W-L-D)."
+        % (rollup["games"], rollup["sessions"], rollup["first_date"],
+           rollup["last_date"], record),
+        "",
+        "Everything here is about this deck. A habit in this note is the deck's "
+        "until a second deck shows it too, at which point `[C] Play Profile.md` "
+        "picks it up as a habit of the player. See that note for the cross-deck "
+        "picture.",
+        "",
+    ]
+
+    lines += ["## Habits on this deck", ""]
+    table = _table(rollup, {"trend", "watching", "faded"})
+    if table:
+        lines += [table, ""]
+        for h in rollup["habits"]:
+            if h["bucket"] == "below-bar":
+                continue
+            note = ["**%s** (`%s`). %d time(s) in %d game(s), turns %s. %s"
+                    % (h["top_habit"] or h["kind"], h["kind"],
+                       h["occurrences"], h["games"],
+                       ", ".join(str(t) for t in h["turns"]),
+                       "Also seen on other decks, so the cross-deck note "
+                       "carries it." if h["cross_deck"]
+                       else "Only seen on this deck so far.")]
+            if h["intent_mismatch"]:
+                note.append(
+                    "In %d of these the stated plan and the line disagreed, so "
+                    "this reads as execution rather than judgement."
+                    % h["intent_mismatch"])
+            if h["bias_flag"]:
+                note.append(
+                    "**Discount this count.** %d of %d were found because the "
+                    "profile predicted them, so it is partly confirmation."
+                    % (h["prompted_by_profile"], h["occurrences"]))
+            if len(h["habit_wordings"]) > 1:
+                note.append("Also written as: %s."
+                            % "; ".join(h["habit_wordings"][1:]))
+            lines += [" ".join(note), ""]
+    else:
+        lines += ["Nothing at two occurrences yet on this deck.", ""]
+
+    _matchup_section(rollup, lines)
+    _sideboard_section(rollup, lines)
+
+    lines += ["## Opening hands on this deck", ""]
+    hands = rollup["hands"]
+    if hands["recorded"]:
+        lines += ["| Kept at | Games | Record (W-L-D) | Mean lands | Outcomes |",
+                  "|---|---|---|---|---|"]
+        for size, v in hands["by_size"].items():
+            outcomes = ", ".join("%s %d" % (k, n)
+                                 for k, n in v["outcomes"].items()) or "none"
+            lines.append("| %d | %d | %s | %s | %s |" % (
+                size, v["games"], v["record"],
+                "n/a" if v["mean_lands"] is None else v["mean_lands"], outcomes))
+        lines += ["", "Every hand card-for-card: `python play_profile.py "
+                  "--hands`.", ""]
+    else:
+        lines += ["No hands recorded for this deck yet.", ""]
+
+    if problems:
+        lines += ["---", "", "## Data problems", "",
+                  "**%d ledger line(s) could not be used** across the whole "
+                  "ledger. Run `python play_profile.py --validate`."
+                  % len(problems), ""]
+
+    return "\n".join(lines)
 
 
 def render_profile(rollup, problems, today=None):
@@ -548,12 +800,36 @@ def render_profile(rollup, problems, today=None):
             "",
         ]
 
+    # Decks
+    lines += ["## Decks", ""]
+    lines += ["Each deck has its own note, and this one carries what shows up "
+              "across more than one of them. A habit seen with a single deck "
+              "stays in that deck's note: it might be the archetype, the "
+              "matchup, or a week of practice rather than how this person "
+              "plays.", ""]
+    lines += ["| Deck | Games | Note |", "|---|---|---|"]
+    for deck, n in rollup["your_decks"].items():
+        lines.append("| %s | %d | `%s` |" % (deck, n, deck_filename(deck)))
+    lines.append("")
+
+    deck_only = [h for h in rollup["habits"]
+                 if h["bucket"] in {"trend", "watching"} and not h["cross_deck"]]
+    if deck_only:
+        lines += ["Single-deck so far, and left in the deck notes: %s."
+                  % "; ".join("%s (%s, %s)" % (h["top_habit"] or h["kind"],
+                                               h["kind"], h["decks"][0])
+                              for h in deck_only), ""]
+
     # Trends
     lines += ["## Trends", ""]
-    table = _table(rollup, {"trend"})
+    lines += ["A trend here has cleared the bar **and** shown up with at least "
+              "%d deck(s). That second condition is what separates how you play "
+              "from what a deck makes you do." % MIN_DECKS_FOR_PLAYER_HABIT, ""]
+    table = _table(rollup, {"trend"}, cross_deck_only=True)
     if table:
         lines += [table, ""]
-        for h in [x for x in rollup["habits"] if x["bucket"] == "trend"]:
+        for h in [x for x in rollup["habits"]
+                  if x["bucket"] == "trend" and x["cross_deck"]]:
             note = ["**%s** (`%s`). %d time(s) in %d game(s) across %d session(s), "
                     "last on %s. Turns: %s." % (
                         h["top_habit"] or h["kind"], h["kind"], h["occurrences"],
@@ -660,7 +936,7 @@ def render_profile(rollup, problems, today=None):
 
     # Watching
     lines += ["## Watching", ""]
-    table = _table(rollup, {"watching"})
+    table = _table(rollup, {"watching"}, cross_deck_only=True)
     if table:
         lines += ["Two occurrences. Counted, not concluded.", "", table, ""]
     else:
@@ -668,7 +944,7 @@ def render_profile(rollup, problems, today=None):
 
     # Faded
     lines += ["## Faded", ""]
-    table = _table(rollup, {"faded"})
+    table = _table(rollup, {"faded"}, cross_deck_only=True)
     if table:
         lines += ["Cleared the bar once and has not appeared in the last %d "
                   "session(s)." % FADE_AFTER_SESSIONS, "", table, ""]
@@ -869,6 +1145,23 @@ def main():
     print("\nWrote %s" % profile)
     if backup:
         print("Previous version kept at %s" % backup)
+
+    by_deck = roll_up_by_deck(rows, args.min_occurrences, args.min_sessions)
+    for deck, deck_rollup in by_deck.items():
+        path = os.path.join(os.path.dirname(profile), deck_filename(deck))
+        deck_text = render_deck_profile(deck, deck_rollup, problems)
+        try:
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as fh:
+                    if fh.read() == deck_text:
+                        print("Deck profile already current: %s" % path)
+                        continue
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(deck_text)
+        except OSError as exc:
+            print("Could not write the deck profile for %s: %s" % (deck, exc))
+            continue
+        print("Wrote %s  (%d game(s))" % (path, deck_rollup["games"]))
     print()
     return 2 if problems else 0
 

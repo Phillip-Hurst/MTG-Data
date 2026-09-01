@@ -230,7 +230,9 @@ def test_a_mostly_profile_prompted_habit_is_flagged_for_discount():
     h = habit_named(rolled, "removal-timing")
     assert h["bucket"] == "trend" and h["bias_flag"] is True
 
-    text = pp.render_profile(rolled, [], today="2026-08-31")
+    # One deck in the fixture, so the habit reports in that deck's note rather
+    # than the cross-deck one. The flag has to survive the move.
+    text = pp.render_deck_profile("Test Deck A", rolled, [], today="2026-08-31")
     assert "Discount this count" in text
 
 
@@ -258,7 +260,8 @@ def test_intent_mismatch_is_counted_separately_from_the_habit():
     ])
     h = habit_named(rolled, "removal-timing")
     assert h["intent_mismatch"] == 2
-    assert "execution rather than judgement" in pp.render_profile(rolled, [])
+    assert "execution rather than judgement" in pp.render_deck_profile(
+        "Test Deck A", rolled, [])
 
 
 def test_strengths_clear_the_same_bar_as_leaks():
@@ -519,3 +522,150 @@ def test_the_hand_vocabularies_match_the_reference_note():
         text = fh.read()
     for value in pp.HAND_SHAPES + pp.HAND_OUTCOMES:
         assert value in text, f"hand value absent from the reference note: {value}"
+
+
+# --------------------------------------------------- decks, matchups, boarding
+
+def test_a_habit_on_one_deck_is_not_yet_a_habit_of_the_player():
+    """
+    Holding up mana badly in a control mirror says nothing about how someone
+    plays aggro. Until a second deck shows the habit it belongs to the deck,
+    and the cross-deck note says where it lives instead of claiming it.
+    """
+    rolled = rollup([
+        game("2026-08-30", [finding(), finding(turn=5)], your_deck="UW Control"),
+        game("2026-08-31", [finding(turn=6)], your_deck="UW Control"),
+    ])
+    h = habit_named(rolled, "removal-timing")
+    assert h["bucket"] == "trend"
+    assert h["cross_deck"] is False
+    assert h["decks"] == ["UW Control"]
+
+    text = pp.render_profile(rolled, [])
+    section = text.split("## Trends", 1)[1].split("## Strengths", 1)[0]
+    assert "Nothing has cleared the bar yet" in section
+    assert "Single-deck so far" in text
+
+
+def test_a_habit_across_two_decks_is_a_habit_of_the_player():
+    rolled = rollup([
+        game("2026-08-30", [finding(), finding(turn=5)], your_deck="UW Control"),
+        game("2026-08-31", [finding(turn=6)], your_deck="Mono Red"),
+    ])
+    h = habit_named(rolled, "removal-timing")
+    assert h["cross_deck"] is True
+    assert h["decks"] == ["Mono Red", "UW Control"]
+    text = pp.render_profile(rolled, [])
+    assert "Mono Red, UW Control" in text
+
+
+def test_each_deck_gets_its_own_rollup():
+    rows = [
+        game("2026-08-30", [finding()], your_deck="UW Control", result="L"),
+        game("2026-08-31", [finding(turn=6)], your_deck="Mono Red", result="W"),
+    ]
+    by_deck = pp.roll_up_by_deck(rows, 3, 2)
+    assert sorted(by_deck) == ["Mono Red", "UW Control"]
+    assert by_deck["Mono Red"]["games"] == 1
+    assert by_deck["Mono Red"]["results"] == {"W": 1}
+
+
+def test_a_deck_name_cannot_write_outside_the_insights_folder():
+    """
+    Deck names come from the user through a review. A slash in one would
+    otherwise put the note somewhere nobody looks for it.
+    """
+    name = pp.deck_filename("UW/Control: the ../deck")
+    assert "/" not in name and "\\" not in name
+    assert name.startswith("[C] Play Profile - ") and name.endswith(".md")
+
+
+def test_a_small_personal_matchup_record_is_called_an_anecdote():
+    """
+    A handful of games is not a win rate. The archetype notes carry hundreds of
+    matches and they win any disagreement; this section exists for texture.
+    """
+    rolled = rollup([
+        game("2026-08-30", [], their_deck="Izzet Spellementals", result="L"),
+        game("2026-08-31", [], their_deck="Izzet Spellementals", result="W",
+             game_no=2),
+    ])
+    m = rolled["matchups"][0]
+    assert m["games"] == 2 and m["record"] == "1-1-0"
+    assert m["meaningful"] is False
+    text = pp.render_deck_profile("Test Deck A", rolled, [])
+    assert "anecdote" in text
+    assert "the archetype note wins" in text
+
+
+def test_a_matchup_becomes_worth_reading_at_the_threshold():
+    rows = [game("2026-08-%02d" % (d + 1), [], their_deck="Dimir Midrange",
+                 game_no=i + 1)
+            for d in range(pp.MEANINGFUL_MATCHUP_GAMES) for i in [0]]
+    rolled = rollup(rows)
+    assert rolled["matchups"][0]["meaningful"] is True
+
+
+def test_sideboarding_is_recorded_per_matchup():
+    row = game("2026-08-30", [], their_deck="Izzet Spellementals")
+    row["sideboard"] = {"in": ["Rest in Peace", "Flashfreeze"],
+                        "out": ["Seam Rip"]}
+    assert pp.validate_row(row, 1) == []
+    rolled = rollup([row])
+    m = rolled["matchups"][0]
+    assert {c["card"] for c in m["boarded_in"]} == {"Rest in Peace", "Flashfreeze"}
+    assert m["boarded_out"][0]["card"] == "Seam Rip"
+    assert "Rest in Peace" in pp.render_deck_profile("Test Deck A", rolled, [])
+
+
+def test_a_malformed_sideboard_is_rejected_rather_than_counted():
+    row = game("2026-08-30", [])
+    row["sideboard"] = {"in": "Rest in Peace"}
+    assert pp.validate_row(row, 1)
+
+
+def test_deck_profiles_are_written_next_to_the_cross_deck_note(tmp_path):
+    code = run(tmp_path, [], rows=[
+        game("2026-08-30", [], your_deck="UW Control"),
+        game("2026-08-31", [], your_deck="Mono Red"),
+    ])
+    assert code == 0
+    assert (tmp_path / pp.PROFILE_NAME).exists()
+    assert (tmp_path / pp.deck_filename("UW Control")).exists()
+    assert (tmp_path / pp.deck_filename("Mono Red")).exists()
+
+
+def test_boarding_is_counted_per_game_not_per_copy():
+    """
+    Four copies of one card in one game is one boarding decision. Counting
+    copies would report a four-of as four times the habit of a one-of.
+    """
+    row = game("2026-08-30", [], their_deck="Izzet Spellementals")
+    row["sideboard"] = {"in": ["Flashfreeze"] * 4, "out": ["Seam Rip"] * 2}
+    rolled = rollup([row])
+    m = rolled["matchups"][0]
+    assert m["boarded_in"][0] == {"card": "Flashfreeze", "games": 1}
+    assert m["boarded_out"][0] == {"card": "Seam Rip", "games": 1}
+
+
+def test_many_wordings_under_one_kind_are_labelled_by_the_kind():
+    """
+    Seven findings written seven different ways, headlined by whichever came
+    first, reads as a much narrower claim than the ledger supports.
+    """
+    rolled = rollup([
+        game("2026-08-30", [finding(habit="first thing"),
+                            finding(turn=5, habit="second thing"),
+                            finding(turn=6, habit="third thing")]),
+    ])
+    h = habit_named(rolled, "removal-timing")
+    assert h["top_habit"] == "removal-timing decisions (3 wordings)"
+
+
+def test_one_dominant_wording_still_gets_named():
+    rolled = rollup([
+        game("2026-08-30", [finding(), finding(turn=5),
+                            finding(turn=6, habit="something else")]),
+    ])
+    h = habit_named(rolled, "removal-timing")
+    assert h["top_habit"] == "spent removal on the first legal target"

@@ -20,6 +20,15 @@ report the cards that are performing in it and stop. Naming it is `deck-check`'s
 job, and it's the only thing that turns those cards into an archetype with a win
 rate. Say the skill's name and hand over; never reimplement it here.
 
+**`vod-review` writes into the archetype notes too, and its sections are not data.**
+It adds cards and interactions it verified on Scryfall, which are facts and belong
+there. It also adds a `## Personal experience (small sample, not tournament data)`
+section: a handful of the user's own games, deliberately reported as a record rather
+than a win rate. **Never fold those games into `## Matchup data`, never let them move
+a number, and never quote them as field evidence.** Twelve thousand matches beat three
+every time, and this skill owns the table. If the two disagree, the table stands and
+the disagreement is worth a sentence, not an edit.
+
 **Check the pool before quoting a number.** `event_quarantine_<fmt>.json` must
 exist, match the current era, and postdate the last scrape. If it doesn't, say so
 and point at `validate_events.py` rather than reporting the number as fact. On

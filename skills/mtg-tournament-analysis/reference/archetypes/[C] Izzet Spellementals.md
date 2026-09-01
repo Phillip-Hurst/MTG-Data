@@ -54,8 +54,27 @@ timing rather than on stats.** He is a creature on their turn and a land on your
 - Countering him on the way down is the cheapest answer available. After that, the
   answer is a blocker or a life total.
 
-*Added 2026-09-01 from the Shab vs Cdhalo ladder match — Hydro-Man solo'd game three
-from 18 to 0 while every removal spell in a UW Control hand stayed uncastable.*
+*Added 2026-09-01 from a ladder match — Hydro-Man solo'd game three from 18 to 0 while
+every removal spell in a UW Control hand stayed uncastable.*
+
+---
+
+## Personal experience (small sample, not tournament data)
+
+**Sample: 3 games, 1 match, 2026-09-01. On UW Control. Record 1-2.** The matchup table
+below is built on a much larger pool and overrides anything in this section. Three
+games is a record, not a win rate.
+
+- **Hydro-Man is the problem card for a UW removal suite, not Sunderflock.** Day of
+  Judgment cannot kill him at all: it's a sorcery, so it only ever resolves on your
+  turn, and on your turn he's a land. The whole game plan of wrathing the board and
+  taking over misses their two-drop.
+- **Disdainful Stroke was blank.** Their battlefield comes down at two and three mana
+  and their card flow costs one. It lines up against Sunderflock and nothing else.
+- What did work: instant-speed removal held for their turn, and countering the threat
+  on the way down. Erode at {W} and Get Out at {U}{U} are the cards that answer him.
+- Game one was a straight attrition loss to Hearth Elemental into Eddymurk Crab into
+  Sunderflock, which is the archetype doing what the note above says it does.
 
 ---
 
