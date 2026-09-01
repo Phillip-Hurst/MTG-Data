@@ -418,3 +418,104 @@ def test_the_kind_vocabulary_matches_the_reference_note():
     assert not missing, f"kinds absent from the reference note: {missing}"
     for tell in pp.PACE_TELLS:
         assert tell in text, f"pace tell absent from the reference note: {tell}"
+
+
+# ------------------------------------------------------------- kept hands
+
+def hand(kept_at=6, lands=2, cards=None, shape="interaction-heavy",
+         outcome="screwed", **extra):
+    h = {
+        "kept_at": kept_at,
+        "lands": lands,
+        "cards": cards or ["Island", "Plains", "Stock Up", "Negate",
+                           "Get Lost", "Day of Judgment"][:kept_at],
+        "shape": shape,
+        "outcome": outcome,
+    }
+    h.update(extra)
+    return h
+
+
+def game_with_hand(date="2026-09-01", result="L", game_no=1, **hand_kwargs):
+    row = game(date, [], game_no=game_no, result=result)
+    row["hand"] = hand(**hand_kwargs)
+    return row
+
+
+def test_a_hand_is_stored_card_for_card_and_counted_by_size():
+    """
+    "That was a keep" is an opinion. The cards, the land count and the result
+    are what make a mulligan finding arguable, so all three survive the rollup.
+    """
+    rolled = rollup([
+        game_with_hand(kept_at=6, lands=2, result="L"),
+        game_with_hand(kept_at=7, lands=3, result="W", game_no=2,
+                       shape="lands-and-spells", outcome="neither"),
+    ])
+    hands = rolled["hands"]
+    assert hands["recorded"] == 2
+    assert hands["by_size"][6]["record"] == "0-1-0"
+    assert hands["by_size"][7]["record"] == "1-0-0"
+    assert hands["by_size"][6]["mean_lands"] == 2.0
+    assert hands["index"][0]["cards"][0] == "Island"
+    assert hands["outcomes"]["screwed"] == 1
+
+
+def test_a_hand_whose_card_count_disagrees_with_kept_at_is_rejected():
+    """
+    A six-card keep listing five cards means one was missed in transcription,
+    and a hand that is wrong is worse than a hand that is absent: it gets
+    counted, and the count is what the whole ledger is for.
+    """
+    row = game_with_hand()
+    row["hand"]["cards"] = row["hand"]["cards"][:5]
+    problems = pp.validate_row(row, 1)
+    assert any("kept_at" in p for p in problems)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("shape", "felt-fine"),
+    ("outcome", "unlucky"),
+    ("kept_at", 9),
+    ("lands", -1),
+])
+def test_hand_vocabularies_and_bounds_are_enforced(field, value):
+    row = game_with_hand()
+    row["hand"][field] = value
+    assert pp.validate_row(row, 1)
+
+
+def test_a_game_with_no_hand_still_counts(tmp_path):
+    """
+    The ledger predates hand logging, so an older line has to stay usable. It
+    just does not contribute to the hand counts.
+    """
+    row = game("2026-08-31", [finding()])
+    assert pp.validate_row(row, 1) == []
+    rolled = rollup([row])
+    assert rolled["hands"]["recorded"] == 0
+
+
+def test_the_profile_says_when_no_hands_are_recorded():
+    text = pp.render_profile(rollup([game("2026-08-31", [finding()])]), [])
+    assert "## Opening hands" in text
+    assert "No hands recorded yet" in text
+
+
+def test_the_profile_reports_hands_when_they_exist():
+    text = pp.render_profile(rollup([
+        game_with_hand(kept_at=6, lands=2),
+        game_with_hand(kept_at=6, lands=2, date="2026-09-02", game_no=2),
+    ]), [])
+    assert "Recorded for 2 of 2 game(s)" in text
+    assert "interaction-heavy" in text
+    assert "screwed" in text
+
+
+def test_the_hand_vocabularies_match_the_reference_note():
+    ref = os.path.join(SCRIPT_DIR, "skills", "vod-review", "reference",
+                       "play-profile.md")
+    with open(ref, encoding="utf-8") as fh:
+        text = fh.read()
+    for value in pp.HAND_SHAPES + pp.HAND_OUTCOMES:
+        assert value in text, f"hand value absent from the reference note: {value}"

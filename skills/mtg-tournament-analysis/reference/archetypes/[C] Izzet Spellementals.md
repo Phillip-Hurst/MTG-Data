@@ -31,8 +31,31 @@ Develop elemental creatures. Resolve Sunderflock to bounce the opponent's entire
 | Brightglass Gearhulk | Artifact creature with recursion — verify Scryfall for exact mechanics |
 | Eddymurk Crab | Elemental; tap-lock effect (Keen-Eyed Curator can suppress by eating yard count) |
 | Hearth Elemental | Elemental count contributor |
+| **Hydro-Man, Fluid Felon** | {U}{U} legendary Elemental Villain 2/2. Grows +1/+1 until end of turn on each blue spell they cast. **At the beginning of their end step he untaps and becomes a land until their next turn — he is not a creature during your turn.** Scryfall-verified 2026-09-01 |
+| **Colorstorm Stallion** | {1}{U}{R} Elemental Horse 3/3, ward {1}, haste. +1/+1 until end of turn per instant or sorcery; five or more mana spent on that spell copies it. Scryfall-verified 2026-09-01 |
+| Stoke Genius, Ral, Crackling Wit | Seen in a 2026-09-01 ladder list alongside Opt, Sleight of Hand, Spell Pierce, Spell Snare, Winternight Stories, Traumatic Critique, Prismari Charm, Burst Lightning. Text not verified |
 
 *Card texts not fully confirmed from transcripts. Verify with Scryfall before relying on specific interactions.*
+
+---
+
+## Key tricks and interactions
+
+**Hydro-Man is the card that beats a control deck's removal suite, and it beats it on
+timing rather than on stats.** He is a creature on their turn and a land on yours, so:
+
+- Nothing cast at sorcery speed on your own turn can ever target him. Wraths that
+  destroy all creatures miss him too — during your turn he isn't one.
+- The only window is instant speed during **their** turn, before their end step
+  trigger. Against a draw-go deck that means holding up removal on a turn they might
+  simply not attack.
+- He costs two mana and grows on every cantrip, so a deck full of Opt and Sleight of
+  Hand turns him into a real clock while spending its mana on card selection.
+- Countering him on the way down is the cheapest answer available. After that, the
+  answer is a blocker or a life total.
+
+*Added 2026-09-01 from the Shab vs Cdhalo ladder match — Hydro-Man solo'd game three
+from 18 to 0 while every removal spell in a UW Control hand stayed uncastable.*
 
 ---
 

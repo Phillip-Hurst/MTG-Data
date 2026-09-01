@@ -155,6 +155,31 @@ of the plugin. This matters more in a review than anywhere else, because a revie
 turns on exact costs and exact text: whether the counterspell could have been held
 up, whether the removal spell answered the threat, whether the trigger was optional.
 
+### Build the card list before you grade anything
+
+The archetype note's **Key cards** and **Key tricks and interactions** tables are the
+review's working memory. Read them and hold them open: they say which of the
+opponent's cards the line had to respect, and a grade written without them is a grade
+written against a deck you didn't look up.
+
+1. **List the cards that were actually in the picture.** Everything the opponent
+   revealed across the match, plus anything the archetype note flags that they had
+   mana for and hadn't shown yet. Verify each on Scryfall.
+2. **Write down the interaction, not the name.** "Hydro-Man" is a name. "Becomes a
+   land at his end step until his next turn, so it isn't a creature during your turn
+   and sorcery-speed removal can never target it" is the thing that decided the game.
+   The review's **Cards that mattered** section carries these, one line each.
+3. **A card that decided a game and isn't in the archetype note goes into the note.**
+   Append it to Key cards with its verified text and the date, and say in the review
+   that you did. This is the whole reason the notes exist: the next review of that
+   matchup starts knowing what this one had to learn the hard way.
+4. **If no archetype note exists for the opponent's deck**, say so plainly and build
+   the card list from the reveals alone. Don't fabricate an archetype's contents from
+   the name.
+
+The card that decided the game is the same card the interview's third question is
+about, so this step feeds Step 4 directly.
+
 ---
 
 ## Step 3: Find the decision points
@@ -163,7 +188,7 @@ Most turns have no decision worth reviewing. Look for these.
 
 | Decision point | The question to ask |
 |---|---|
-| **Mulligan** | What did the hand need to function, and how many of the deck's cards provided it? Count them. |
+| **Mulligan** | What did the hand need to function, and how many of the deck's cards provided it? Count them. Write the hand down card for card first (see below). |
 | **Play or draw** | Did the choice match the matchup, or the default? |
 | **Sequencing lands** | Which land was held back, and did it cost a colour or a untapped mana later? |
 | **Holding up mana vs deploying** | What were you representing, and could the opponent see through it? |
@@ -176,6 +201,29 @@ Most turns have no decision worth reviewing. Look for these.
 **The turn the game was lost is rarely the last turn.** By the time the lethal attack
 comes, the decision was made a while ago. Work backwards from the loss until you find
 the turn where a different choice changes the outcome, then review that one.
+
+### Write the kept hand down first
+
+**Before anything else in the game, record the hand that was kept, card for card.**
+Untapped shows it at the mulligan state and then it's gone; a pasted log has it at the
+top; from screenshots, ask. Record the count kept (7, 6, 5), the lands in it, the
+cards in Scryfall spelling, and whether the player was on the play.
+
+Do this for every game, win or loss, not only the games with a mulligan finding. Two
+reasons:
+
+- **A mulligan grade needs the hand to be arguable.** "That was a keep" is an opinion.
+  "You kept a 6 with two lands and four spells at three or more, on 27 lands" is a
+  review, and it's a review the player can disagree with using the same numbers.
+- **The hands accumulate into an index.** Across a dozen reviews the ledger answers
+  "what am I actually keeping against this deck" with a count instead of an
+  impression. `python play_profile.py --hands` prints it.
+
+Classify the hand on what was knowable at the keep (`shape`), and record what the draw
+did afterwards (`outcome`) as a separate field. Keeping those apart is what stops a
+hand being graded by how it turned out: `lands-and-spells` that came out `screwed` is
+variance, `land-light` that came out `neither` is still a bad keep that got bailed
+out. Both vocabularies are fixed and live in `reference/play-profile.md`.
 
 **Note the pace tells as you read, and measure pace if the source lets you.** A VOD
 gives real seconds per turn from the timestamps. Untapped gives game duration over
@@ -321,6 +369,22 @@ era: {output of mtg_era.py}
 {Two or three sentences. The one decision that mattered most, and the pattern if
 there is one across games. If the games were fine, say that.}
 
+## Cards that mattered
+
+{One line per card, from the archetype notes plus what the match revealed, verified
+on Scryfall. The interaction, not the name: what it does that the line had to
+respect. Mark any card that wasn't in the archetype note and has now been added to
+it.}
+
+## Opening hands
+
+| Game | Kept at | Lands | On the | Hand | Outcome |
+|---|---|---|---|---|---|
+| 1 | 6 | 2 | play | {card, card, card, ...} | screwed |
+
+{One line under the table per hand worth arguing about: what it needed, how many
+cards in the deck provided it, and whether the keep was right on what was knowable.}
+
 ## Game 1
 
 **Turn {N} — {Punt | Close | Correct}**
@@ -374,6 +438,11 @@ from memory across a dozen review notes is how a habit list turns into a vibe.
    `reference/play-profile.md`. Never invent a `kind` inline; a habit spelled three
    ways splits into three habits, and the script rejects the line rather than counting
    it under a name nothing else uses.
+   **Every line carries its `hand`** — the cards kept, the land count, the shape, and
+   the outcome. The script rejects a hand whose card list disagrees with `kept_at`,
+   because a hand transcribed wrong still gets counted, and the count is the point. A
+   game whose source genuinely never showed the opening hand is the only line that
+   ships without one, and the review says which game that was.
 2. **Run the rollup.** It reads the ledger and rewrites `[C] Play Profile.md`.
 
    ```bash
@@ -381,6 +450,7 @@ from memory across a dozen review notes is how a habit list turns into a vibe.
    python play_profile.py --validate      # check the ledger, write nothing
    python play_profile.py --dry-run       # print the profile, write nothing
    python play_profile.py --json          # the counts, for answering a question
+   python play_profile.py --hands         # the kept-hand index, card by card
    ```
 
 3. **Read the exit code and repeat what it said.** `0` clean, `1` couldn't run,
@@ -433,6 +503,13 @@ answerable straight from the ledger. Skip Steps 1 through 6 and run the rollup:
 python play_profile.py --json
 ```
 
+"What do I keep", "am I keeping too many two-landers", "what did I keep against that
+deck" are the same move against the hand index:
+
+```bash
+python play_profile.py --hands
+```
+
 Answer from those counts rather than from the profile note's prose, and rather than
 from memory of previous sessions.
 
@@ -461,6 +538,11 @@ meant to be passed on rather than smoothed over.
   right. Say so. The same goes for habits: a clean profile is a legitimate result.
 - **Cite the turn.** Every finding names a turn number, and a timestamp too when the
   source is a VOD.
+- **Record the hand.** Every game, card for card, before grading the mulligan. A
+  mulligan finding without the hand behind it is unarguable, and the hand is the one
+  part of a game that can't be recovered later.
+- **Name the interaction, not the card.** A card that decided a game gets its actual
+  text in the review, and gets added to the archetype note if it wasn't there.
 - **Verify cards on Scryfall.** A review that misstates a card's cost is wrong in the
   one way a review cannot afford.
 - **Ask before inferring.** A screenshot with no context, an unreadable card, a

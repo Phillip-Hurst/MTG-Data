@@ -18,6 +18,7 @@ Stdlib only, same as mtg_era.py and rules_lookup.py.
     python play_profile.py --dry-run       # print the rollup, write nothing
     python play_profile.py --validate      # check the ledger, write nothing
     python play_profile.py --json          # machine-readable, writes nothing
+    python play_profile.py --hands         # the index of kept hands, card by card
 
 Exit codes carry meaning, because a tool that always exits 0 cannot gate
 anything:
@@ -76,6 +77,23 @@ PACE_TELLS = (
     "same-15-every-matchup",
     "sequenced-into-own-counterspell",
 )
+
+# The kept hand. A mulligan finding without the hand behind it is unarguable:
+# "that was a keep" is an opinion, "you kept a 6 with two lands and four
+# four-drops" is a review. Storing the card list also makes the ledger the index
+# of what this player actually keeps, which `--hands` prints.
+HAND_SHAPES = (
+    "lands-and-spells",     # functional: enough lands, a curve to spend them on
+    "interaction-heavy",    # removal and counters, light on lands or threats
+    "threat-heavy",         # threats with too little interaction or mana
+    "land-light",           # fewer lands than the deck wants to function
+    "land-heavy",           # lands with too little action
+    "no-early-play",        # nothing castable before the opponent's clock lands
+    "unknown",
+)
+# What the draw actually did to the hand afterwards. Kept separate from shape so
+# a keep can be graded on what was knowable, then compared against what happened.
+HAND_OUTCOMES = ("screwed", "flooded", "neither", "unknown")
 
 # The trend bar. Two occurrences on one night is one bad night, so sessions are
 # counted separately from games.
@@ -162,6 +180,31 @@ def validate_row(row, line_no):
         if not isinstance(f.get("habit"), str) or not f["habit"].strip():
             bad("%s habit is missing or empty" % where)
 
+    hand = row.get("hand")
+    if hand is not None:
+        if not isinstance(hand, dict):
+            bad("hand is not an object")
+        else:
+            kept_at = hand.get("kept_at")
+            if not isinstance(kept_at, int) or not 0 <= kept_at <= 7:
+                bad("hand kept_at %r is not an integer 0-7" % (kept_at,))
+            lands = hand.get("lands")
+            if not isinstance(lands, int) or lands < 0:
+                bad("hand lands %r is not a non-negative integer" % (lands,))
+            cards = hand.get("cards")
+            if not isinstance(cards, list) or not all(
+                    isinstance(c, str) and c.strip() for c in cards):
+                bad("hand cards is missing or not a list of card names")
+            elif isinstance(kept_at, int) and len(cards) != kept_at:
+                bad("hand has %d card(s) listed but kept_at is %d"
+                    % (len(cards), kept_at))
+            if hand.get("shape") not in HAND_SHAPES:
+                bad("hand shape %r is not in the fixed vocabulary"
+                    % (hand.get("shape"),))
+            outcome = hand.get("outcome", "unknown")
+            if outcome not in HAND_OUTCOMES:
+                bad("hand outcome %r is not in the fixed vocabulary" % (outcome,))
+
     pace = row.get("pace")
     if pace is not None:
         if not isinstance(pace, dict):
@@ -219,6 +262,16 @@ def read_ledger(path):
 
 # ------------------------------------------------------------------- rollup
 
+def hand_keeps_top(card_keeps, limit=10):
+    """Cards that show up most often in hands this player chose to keep.
+
+    Not a judgement, a frequency. It answers "what am I actually keeping" with
+    a count rather than an impression, which is the same trade the habit table
+    makes.
+    """
+    return [{"card": c, "hands": n} for c, n in card_keeps.most_common(limit)]
+
+
 def roll_up(rows, min_occurrences, min_sessions):
     """Count the ledger. No judgement here, just arithmetic."""
     sessions = sorted({r["date"] for r in rows})
@@ -244,6 +297,13 @@ def roll_up(rows, min_occurrences, min_sessions):
     pace_by_measure = defaultdict(list)
     tells = Counter()
     games_with_pace = 0
+    hand_rows = []
+    hands_by_size = defaultdict(lambda: {
+        "games": 0, "results": Counter(), "lands": [], "outcomes": Counter(),
+    })
+    hand_shapes = Counter()
+    hand_outcomes = Counter()
+    card_keeps = Counter()
 
     for r in rows:
         game_key = (r["date"], r["their_deck"], r["game"])
@@ -281,6 +341,34 @@ def roll_up(rows, min_occurrences, min_sessions):
             value = iv.get(field)
             if isinstance(value, int):
                 interview[field] += value
+
+        hand = r.get("hand")
+        if isinstance(hand, dict):
+            size = hand["kept_at"]
+            outcome = hand.get("outcome", "unknown")
+            bucket = hands_by_size[size]
+            bucket["games"] += 1
+            bucket["results"][r["result"]] += 1
+            bucket["lands"].append(hand["lands"])
+            bucket["outcomes"][outcome] += 1
+            hand_shapes[hand["shape"]] += 1
+            hand_outcomes[outcome] += 1
+            for card in hand["cards"]:
+                card_keeps[card.strip()] += 1
+            hand_rows.append({
+                "date": r["date"],
+                "game": r["game"],
+                "your_deck": r["your_deck"],
+                "their_deck": r["their_deck"],
+                "result": r["result"],
+                "on_the_play": r.get("on_the_play"),
+                "kept_at": size,
+                "lands": hand["lands"],
+                "shape": hand["shape"],
+                "outcome": outcome,
+                "cards": list(hand["cards"]),
+                "note": hand.get("note"),
+            })
 
     total_games = len({(r["date"], r["their_deck"], r["game"]) for r in rows})
 
@@ -345,9 +433,29 @@ def roll_up(rows, min_occurrences, min_sessions):
         "tells": dict(sorted(tells.items(), key=lambda kv: (-kv[1], kv[0]))),
     }
 
+    hands = {
+        "recorded": len(hand_rows),
+        "games_total": total_games,
+        "by_size": {
+            size: {
+                "games": v["games"],
+                "record": "-".join(str(v["results"].get(g, 0)) for g in RESULTS),
+                "mean_lands": round(sum(v["lands"]) / len(v["lands"]), 1)
+                if v["lands"] else None,
+                "outcomes": dict(sorted(v["outcomes"].items())),
+            }
+            for size, v in sorted(hands_by_size.items(), reverse=True)
+        },
+        "shapes": dict(hand_shapes.most_common()),
+        "outcomes": dict(hand_outcomes.most_common()),
+        "most_kept_cards": hand_keeps_top(card_keeps),
+        "index": sorted(hand_rows, key=lambda h: (h["date"], h["game"])),
+    }
+
     return {
         "games": total_games,
         "rows": len(rows),
+        "hands": hands,
         "sessions": len(sessions),
         "session_dates": sessions,
         "first_date": sessions[0] if sessions else None,
@@ -484,6 +592,43 @@ def render_profile(rollup, problems, today=None):
                   "grades, which is the bucket a review has to be honest to use.",
                   ""]
 
+    # Opening hands
+    lines += ["## Opening hands", ""]
+    hands = rollup["hands"]
+    if hands["recorded"]:
+        lines += ["**Recorded for %d of %d game(s).** Every kept hand is listed "
+                  "card-for-card in its review note; this is the count."
+                  % (hands["recorded"], hands["games_total"]), ""]
+        lines += ["| Kept at | Games | Record (W-L-D) | Mean lands | Outcomes |",
+                  "|---|---|---|---|---|"]
+        for size, v in hands["by_size"].items():
+            outcomes = ", ".join("%s %d" % (k, n)
+                                 for k, n in v["outcomes"].items()) or "none"
+            lines.append("| %d | %d | %s | %s | %s |" % (
+                size, v["games"], v["record"],
+                "n/a" if v["mean_lands"] is None else v["mean_lands"], outcomes))
+        lines.append("")
+
+        shapes = ", ".join("%s x%d" % (s, n) for s, n in hands["shapes"].items())
+        lines += ["Shapes kept: %s." % shapes, ""]
+
+        screwed = hands["outcomes"].get("screwed", 0)
+        flooded = hands["outcomes"].get("flooded", 0)
+        if screwed or flooded:
+            lines += ["Mana outcome: %d screwed, %d flooded, out of %d hand(s). "
+                      "A keep is graded on what was knowable when it was made, so "
+                      "this line describes the draws, not the decisions."
+                      % (screwed, flooded, hands["recorded"]), ""]
+
+        if hands["most_kept_cards"]:
+            lines += ["Most-kept cards: %s." % ", ".join(
+                "%s (%d)" % (c["card"], c["hands"])
+                for c in hands["most_kept_cards"]), ""]
+    else:
+        lines += ["**No hands recorded yet.** A mulligan finding needs the hand "
+                  "behind it to be arguable, so reviews from here on log the kept "
+                  "hand card-for-card.", ""]
+
     # Pace
     lines += ["## Pace", ""]
     pace = rollup["pace"]
@@ -569,6 +714,9 @@ def main():
                    help="check the ledger and write nothing")
     p.add_argument("--json", action="store_true",
                    help="machine-readable rollup on stdout; writes nothing")
+    p.add_argument("--hands", action="store_true",
+                   help="print the index of kept hands, newest last; "
+                        "writes nothing")
     p.add_argument("--min-occurrences", type=int, default=DEFAULT_MIN_OCCURRENCES)
     p.add_argument("--min-sessions", type=int, default=DEFAULT_MIN_SESSIONS)
     args = p.parse_args()
@@ -617,13 +765,38 @@ def main():
                          indent=2, ensure_ascii=False))
         return 2 if problems else 0
 
+    if args.hands:
+        hands = rollup["hands"]
+        print("\nKept hands: %s" % ledger)
+        if not hands["recorded"]:
+            print("  None recorded. Reviews log the kept hand card-for-card; "
+                  "older ledger lines predate that.")
+            return 2 if problems else 0
+        print("  %d of %d game(s) carry a hand\n"
+              % (hands["recorded"], hands["games_total"]))
+        for h in hands["index"]:
+            print("  %s  G%d  %s vs %s  %s  kept %d (%d land%s, %s, %s)%s"
+                  % (h["date"], h["game"], h["your_deck"], h["their_deck"],
+                     h["result"], h["kept_at"], h["lands"],
+                     "" if h["lands"] == 1 else "s", h["shape"], h["outcome"],
+                     "  on the play" if h["on_the_play"] else ""))
+            print("      %s" % ", ".join(h["cards"]))
+            if h.get("note"):
+                print("      %s" % h["note"])
+        print()
+        return 2 if problems else 0
+
     if args.validate:
         print("\nLedger: %s" % ledger)
         print("  %d line(s) usable, %d problem(s)" % (len(rows), len(problems)))
         for msg in problems:
             print("  %s" % msg)
-        print("  vocabularies: %d kinds, %d grades, %d pace measures, %d tells"
-              % (len(KINDS), len(GRADES), len(PACE_MEASURES), len(PACE_TELLS)))
+        print("  vocabularies: %d kinds, %d grades, %d pace measures, %d tells, "
+              "%d hand shapes, %d hand outcomes"
+              % (len(KINDS), len(GRADES), len(PACE_MEASURES), len(PACE_TELLS),
+                 len(HAND_SHAPES), len(HAND_OUTCOMES)))
+        print("  hands recorded: %d of %d game(s)"
+              % (rollup["hands"]["recorded"], rollup["hands"]["games_total"]))
         print()
         return 2 if problems else 0
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.8.1 - 2026-09-01
+
+`vod-review` writes down the hand, and looks up the opponent's cards before it grades.
+
+### The kept hand is now evidence
+
+- **Every reviewed game records the hand that was kept, card for card**, in a new `hand` object on the ledger row: `kept_at`, `lands`, `cards`, `shape`, `outcome`, and an optional one-line `note`. A mulligan finding without the hand behind it can't be argued with, and the hand is the one part of a game that isn't recoverable later: the replay shows it for four seconds and then it's gone.
+- **`shape` is judged on what was knowable at the keep, `outcome` on what the draw did afterwards**, and they're separate fields on purpose. `lands-and-spells` that came out `screwed` is variance. `land-light` that came out `neither` is still a bad keep that got bailed out. Collapsing the two is how outcome bias gets into a mulligan grade.
+- **Both vocabularies are fixed** (seven shapes, four outcomes), same rule as `kind`, with a test asserting they match the reference note.
+- **The script rejects a hand whose card list disagrees with `kept_at`.** A hand transcribed wrong still gets counted, and the count is the whole point.
+- **New `python play_profile.py --hands`**: the index of kept hands, newest last, card for card, with deck, result, and what the draw did. "What am I actually keeping against this deck" is now a count rather than an impression.
+- **The profile gained an Opening hands section**: games by kept size with record and mean lands, the shapes kept, the screwed/flooded split, and the most-kept cards.
+- `hand` is optional in the schema so ledger lines written before this stay usable, and not optional in a review: a game whose source showed the hand and got logged without one has thrown the evidence away.
+
+### The archetype notes are the review's working memory
+
+- **New Step 2 sub-step: build the card list before grading anything.** The archetype note's Key cards and Key tricks tables get read for both decks and held open, because a grade written without them is a grade written against a deck nobody looked up.
+- **Write down the interaction, not the name.** The review's new **Cards that mattered** section carries one line per card: what it does that the line had to respect, verified on Scryfall. "Hydro-Man" is a name. "Becomes a land at his end step until his next turn, so sorcery-speed removal on your turn can never target him" is what decided the game.
+- **A card that decided a game and isn't in the archetype note gets added to it**, with its verified text and the date, and the review says so. The next review of that matchup starts knowing what this one learned the hard way.
+- The review template gained **Cards that mattered** and **Opening hands** sections, and the Rules list gained the two matching rules.
+- **`[C] Izzet Spellementals.md` gained Hydro-Man, Fluid Felon and Colorstorm Stallion**, both Scryfall-verified, plus a Key tricks section on why Hydro-Man is structurally unanswerable by a control deck's sorcery-speed removal. Found the hard way in a 2026-09-01 ladder match.
+- **124 tests, up from 114.** Ten cover the hand: storage card-for-card, counting by kept size, the card-count-versus-`kept_at` guard, the two vocabularies and their bounds, an older line with no hand staying usable, and both profile branches.
+
 ## 1.8.0 - 2026-08-31
 
 `vod-review` asks before it grades, and remembers between sessions.

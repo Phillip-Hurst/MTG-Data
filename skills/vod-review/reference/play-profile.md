@@ -19,6 +19,7 @@ python play_profile.py                 # roll up, write the profile
 python play_profile.py --validate      # check the ledger, write nothing
 python play_profile.py --dry-run       # print the profile, write nothing
 python play_profile.py --json          # the counts, for answering a question
+python play_profile.py --hands         # the index of kept hands, card by card
 python play_profile.py --min-occurrences 4 --min-sessions 3   # a stricter bar
 ```
 
@@ -67,6 +68,15 @@ One object per game, not per match. A three-game match appends three lines.
       "prompted_by_profile": false
     }
   ],
+  "hand": {
+    "kept_at": 6,
+    "lands": 2,
+    "cards": ["Island", "Hallowed Fountain", "Three Steps Ahead",
+              "No More Lies", "Stock Up", "Day of Judgment"],
+    "shape": "interaction-heavy",
+    "outcome": "screwed",
+    "note": "never found a fifth land; the counters had nothing worth countering"
+  },
   "pace": {
     "measure": "untapped-duration",
     "seconds_per_turn": 34,
@@ -107,6 +117,54 @@ account for it has a different problem from one who never considered the card.
 predicted it. That flag is the confirmation-bias audit. If most findings for a habit
 carry it, the habit is being found because it's expected, and the count is worth less
 than it looks.
+
+---
+
+## The kept hand
+
+**Every reviewed game logs the hand that was kept, card for card.** A mulligan
+finding without the hand behind it can't be argued with, and the hand is the one
+piece of a game that is never recoverable later: the replay shows it for about
+four seconds and then it's gone into the rest of the game.
+
+Storing it does two jobs. It makes the mulligan grade checkable ("you kept a 6 with
+two lands and four spells that cost three or more"), and across games it turns into
+an index of what this player actually keeps, which `play_profile.py --hands` prints
+and the profile counts.
+
+| Field | What it is |
+|---|---|
+| `kept_at` | Cards kept: 7 for a no-mulligan keep, 6 after one, and so on. `cards` has to be this long |
+| `lands` | Lands in the kept hand. Count MDFC land backs and say so in `note` |
+| `cards` | The hand, card for card, in Scryfall spelling |
+| `shape` | What kind of hand it was, from the fixed list below |
+| `outcome` | What the draw did afterwards, from the fixed list below |
+| `note` | Optional. One line: what the hand needed, and whether it got it |
+
+**`shape` is judged on what was knowable at the keep.** From this list:
+
+```
+lands-and-spells · interaction-heavy · threat-heavy · land-light ·
+land-heavy · no-early-play · unknown
+```
+
+**`outcome` is what happened afterwards**, kept separate on purpose:
+
+```
+screwed · flooded · neither · unknown
+```
+
+Splitting the two is what stops outcome bias getting into the mulligan grade. A
+hand can be `lands-and-spells` and still come out `screwed`, and that combination
+is a variance note, not a punt. The reverse — `land-light` and `neither` — is a
+keep that got bailed out, and it stays a bad keep.
+
+**On the play or on the draw already lives on the row**, so it isn't repeated here.
+The rollup pairs them.
+
+`hand` is optional in the schema, because ledger lines written before this existed
+have to stay usable. It is not optional in a review: a game reviewed from a source
+that shows the opening hand and logged without one has thrown away the evidence.
 
 ---
 
@@ -214,6 +272,13 @@ applied too widely.}
 ## Strengths
 
 {Same bar. Count and dates.}
+
+## Opening hands
+
+{Recorded for X of N games. A table by kept size: games, record, mean lands,
+outcomes. Then the shapes kept, the screwed/flooded split, and the most-kept
+cards. The full card-for-card index lives in the review notes and in
+`--hands`.}
 
 ## Pace
 
