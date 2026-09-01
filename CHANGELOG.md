@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.10.0 - 2026-09-01
+
+The repo carries the plugin, not one person's metagame reading.
+
+### The archetype notes left the repo
+
+- **All 25 archetype notes are out of the repo and out of the bundle.** They were a reading of one metagame at one moment, written from one person's scrape. They go stale the week the format moves, and nobody needs them to run the plugin. `.gitignore` now covers `[C] *.md` inside `skills/mtg-tournament-analysis/reference/archetypes/`, and `package.py` excludes the same path while still shipping the folder's README. They stay on the author's disk, untracked.
+- **New `archetype_names.json`**, and it does ship. The canonical names were carried by the note *filenames*, so deleting the notes would have deleted the vocabulary every source's deck label resolves onto through `mtg_stats.ARCHETYPE_ALIASES`. The manifest carries the names and nothing else. An end user needs the names; they do not need somebody else's notes.
+- **The alias guard now checks the manifest** rather than the folder, so it holds on a fresh clone where the folder is empty. It fails loudly if the manifest is missing: nothing else defines the vocabulary, and an unverifiable alias table is how "Izzet" once resolved to an archetype that did not exist.
+- **`package.py`'s REQUIRED gained the manifest and lost the notes**, so a bundle without the vocabulary fails the build instead of installing and silently merging nothing. The dry run reports canonical names in place of note count. Bundle is 43 files.
+- **Naming a deck is three steps now, not two**: add the name to the manifest, write the note, add the alias. `deck-check` says so, and `CLAUDE.md`'s hard-rules list says so.
+- **`vod-review` treats a missing archetype note as the normal case**, not an error. It builds the card list from what the match revealed, says which cards it had to learn from the game itself, and writes the note afterwards so the next review starts ahead.
+- The folder README was rewritten from "here are the notes" to "here is what belongs here and why it arrives empty", including the precedence rule between tournament data and personal experience.
+- **137 tests.** The three that pinned shipped notes now pin the opposite: the manifest exists and is populated, working notes are excluded from the bundle, and the folder README still ships.
+
 ## 1.9.0 - 2026-09-01
 
 One profile per deck, a cross-deck layer above them, and a place to put matchup experience without pretending it's data.

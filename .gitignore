@@ -76,6 +76,11 @@ analyze_weekend.py
 #    skills/mtg-tournament-analysis/reference/archetypes/, which are the
 #    canonical vocabulary and very much meant to publish.
 /\[C\] *.md
+# The archetype notes are working notes about this user's own metagame reading,
+# and an end user needs none of them to run the plugin. They stay on disk and
+# out of the repo. The canonical name list they used to carry lives in
+# archetype_names.json, which does ship.
+skills/mtg-tournament-analysis/reference/archetypes/\[C\] *.md
 mtgo_deck_log.md
 # vod-review's play ledger: a record of this user's own games. The flat
 # no-setup workflow resolves the insights folder to the repo root, so without

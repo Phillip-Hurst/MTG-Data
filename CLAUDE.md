@@ -95,13 +95,15 @@ point at `validate_events.py` instead of reporting the number.
 every card test and is not the format you're analyzing. So does a Modern team-trios
 event on the seat records. Judge events by what they are.
 
-**5. The archetype notes are the vocabulary.** Filenames in
-`skills/mtg-tournament-analysis/reference/archetypes/` are the canonical names every
+**5. `archetype_names.json` is the vocabulary.** Those are the canonical names every
 source resolves onto, through `mtg_stats.ARCHETYPE_ALIASES`. Point an alias at a name
-with no note there and you split a deck instead of merging it. A test fails if you
-try.
+the manifest doesn't carry and you split a deck instead of merging it. A test fails if
+you try. The archetype notes in
+`skills/mtg-tournament-analysis/reference/archetypes/` are local working notes: they
+stay out of the repo and out of the bundle, and a fresh install has none.
 
-**6. Naming a deck is two steps.** Write the note, then add the alias. Never one.
+**6. Naming a deck is three steps.** Add the name to the manifest, write the note,
+then add the alias. Never fewer.
 
 **7. Shell scripts are strictly ASCII.** Windows PowerShell 5.1 reads a BOM-less file
 as ANSI, and one em dash kills string termination. This has broken the pipeline twice.
@@ -142,7 +144,7 @@ they'll tell you what you forgot.
 | Reviewing your own games | `skills/vod-review/SKILL.md` |
 | The play ledger, the trend bar, what pace can be measured | `skills/vod-review/reference/play-profile.md` |
 | Rules and the stack | `skills/rules-check/SKILL.md` and its `reference/` |
-| The canonical archetype names | `skills/mtg-tournament-analysis/reference/archetypes/` |
+| The canonical archetype names | `archetype_names.json` |
 | Version history | `CHANGELOG.md` |
 
 **Keep this file under 2,000 tokens.** If an edit pushes past that, move something

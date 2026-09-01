@@ -379,25 +379,21 @@ def test_aliases_resolve_to_names_the_vault_actually_uses():
     """
     from mtg_stats import ARCHETYPE_ALIASES
 
-    # The shipped copy first, so this holds for anyone who installs the plugin.
-    # The vault folder is the fallback for a working copy that predates it.
-    candidates = [
-        os.path.join(SCRIPT_DIR, "skills", "mtg-tournament-analysis",
-                     "reference", "archetypes"),
-        os.path.join(os.path.dirname(SCRIPT_DIR), "..", "02 Projects",
-                     "MTG Tournament Analysis Skill", "Archetypes"),
-    ]
-    arch_dir = next((d for d in candidates if os.path.isdir(d)), None)
-    if arch_dir is None:
-        pytest.skip("no archetype reference folder reachable from here")
+    # archetype_names.json is the shipped vocabulary. The notes that used to
+    # carry it are one person's working notes and left the repo in 1.10.0; a
+    # fresh clone has none of them, so the manifest is what this checks.
+    manifest = os.path.join(SCRIPT_DIR, "archetype_names.json")
+    if not os.path.exists(manifest):
+        pytest.fail("archetype_names.json is missing: nothing defines the "
+                    "canonical vocabulary, so every alias is unverifiable")
+    with open(manifest, encoding="utf-8") as fh:
+        known = set(json.load(fh)["names"])
 
-    vault = {f[4:-3] for f in os.listdir(arch_dir)
-             if f.startswith("[C] ") and f.endswith(".md")}
     targets = set(ARCHETYPE_ALIASES.values())
-    unknown = {t for t in targets if t not in vault}
+    unknown = {t for t in targets if t not in known}
     assert not unknown, (
-        f"alias target(s) with no note in Archetypes/: {sorted(unknown)}. "
-        "Either add the note or point the alias at the name the vault uses.")
+        f"alias target(s) missing from archetype_names.json: {sorted(unknown)}. "
+        "Either add the name there or point the alias at a name it carries.")
 
 
 def test_no_alias_target_is_itself_aliased():

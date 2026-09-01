@@ -199,7 +199,7 @@ Reads the standings CSV from `MTG_DATA_DIR` and appends a snapshot to `baselines
 
 `vod-review` does two things a one-off review can't. It asks, and it remembers.
 
-**It asks.** Before grading a decision it flagged, it asks what the read was, what you were playing around, and whether a particular card was in the picture. That third question names a real card from the opponent's archetype, either from the shipped archetype note or from `card_signal.py`'s rogue lens for cards the field has started playing that the note hasn't caught up to. It only asks if the deck actually plays the card, the card was live at that moment, and knowing about it changes the line. Otherwise it skips the question, because a manufactured trap teaches you to distrust the review.
+**It asks.** Before grading a decision it flagged, it asks what the read was, what you were playing around, and whether a particular card was in the picture. That third question names a real card from the opponent's archetype, either from your own archetype note if you have built one or from `card_signal.py`'s rogue lens for cards the field has started playing that the note hasn't caught up to. It only asks if the deck actually plays the card, the card was live at that moment, and knowing about it changes the line. Otherwise it skips the question, because a manufactured trap teaches you to distrust the review.
 
 The answers move grades, which is why they're collected first. A sound read whose line still lost is graded `correct`, and your answer is what proves it. Naming the right card and then making a play that ignores it is an execution problem rather than a judgement problem, and those need different practice.
 
@@ -240,9 +240,11 @@ Stdlib only, no browser. Every result prints the CR version alongside it, becaus
 
 ## Archetype names are a fixed vocabulary
 
-`skills/mtg-tournament-analysis/reference/archetypes/` ships 25 archetype notes. Those filenames *are* the canonical vocabulary every source's deck names resolve onto, through `mtg_stats.ARCHETYPE_ALIASES`.
+`archetype_names.json` carries the canonical names. They *are* the vocabulary every source's deck names resolve onto, through `mtg_stats.ARCHETYPE_ALIASES`.
 
-Point an alias at a name with no note there and you split a deck instead of merging it. A test fails if you try, and another fails if the alias table ever chains A to B to C.
+Point an alias at a name the manifest doesn't carry and you split a deck instead of merging it. A test fails if you try, and another fails if the alias table ever chains A to B to C.
+
+**The archetype notes themselves don't ship.** `skills/mtg-tournament-analysis/reference/archetypes/` arrives empty apart from its README. The notes are one person's reading of a metagame at a moment, they go stale the week the format moves, and you need none of them to run the plugin. `mtg-tournament-analysis` writes your own as you scrape; `deck-check` adds the name to the manifest when it names a new deck.
 
 ## Data freshness
 

@@ -169,7 +169,7 @@ def test_sibling_tables_only_name_skills_that_are_actually_here():
 
 # ---------------------------------------------------------------- packaging
 
-def test_package_ships_the_manifest_skills_and_archetype_notes():
+def test_package_ships_the_manifest_skills_and_the_name_manifest():
     """
     The old should_exclude() took a bare filename, so anything not literally
     called SKILL.md was dropped: every archetype note, and the manifest with
@@ -182,8 +182,8 @@ def test_package_ships_the_manifest_skills_and_archetype_notes():
         ".claude-plugin/plugin.json",
         "skills/mtg-tournament-analysis/SKILL.md",
         "skills/deck-check/SKILL.md",
-        "skills/mtg-tournament-analysis/reference/archetypes/[C] Izzet Prowess.md",
         "skills/mtg-tournament-analysis/reference/archetypes/README.md",
+        "archetype_names.json",
         "mtg_stats.py",
         "play_profile.py",
         "set_releases.json",
@@ -215,6 +215,8 @@ def test_package_excludes_data_logs_tests_and_vault_notes():
         ".claude-plugin/marketplace.json",
         "[C] MTGO Review Queue 2026-08-29.md",
         "[C] Play Profile.md",
+        "[C] Play Profile - UW Control.md",
+        "skills/mtg-tournament-analysis/reference/archetypes/[C] Izzet Prowess.md",
         "play_log.jsonl",
         "play_log_standard.jsonl",
         "tests/test_plugin_structure.py",
@@ -227,28 +229,40 @@ def test_package_excludes_data_logs_tests_and_vault_notes():
     assert not leaked, f"package.py would ship: {leaked}"
 
 
-def test_package_required_set_covers_the_archetype_notes():
+def test_package_required_set_covers_the_archetype_names():
     """
-    should_ship() saying yes is not enough. If the notes ever vanish from disk,
-    the build has to fail rather than produce a quietly incomplete bundle.
+    should_ship() saying yes is not enough. The name list is what every deck
+    label resolves onto, so a bundle without it installs and then merges
+    nothing. The build has to fail instead.
     """
     import package
     from pathlib import Path
 
-    assert "archetype notes" in package.REQUIRED
-    match = package.REQUIRED["archetype notes"]
-    assert match(Path(
-        "skills/mtg-tournament-analysis/reference/archetypes/[C] Izzet Prowess.md"))
-    assert not match(Path(
-        "skills/mtg-tournament-analysis/reference/archetypes/README.md"))
+    assert "archetype names" in package.REQUIRED
+    match = package.REQUIRED["archetype names"]
+    assert match(Path("archetype_names.json"))
     assert not match(Path("skills/mtg-tournament-analysis/SKILL.md"))
 
 
-def test_the_archetype_notes_are_actually_on_disk():
-    d = os.path.join(SKILLS_DIR, "mtg-tournament-analysis", "reference", "archetypes")
-    if not os.path.isdir(d):
-        pytest.fail(f"shipped archetype folder is missing: {d}")
-    notes = [f for f in os.listdir(d) if f.endswith(".md") and f != "README.md"]
-    assert len(notes) >= 20, (
-        f"only {len(notes)} archetype notes in {d}. These are the canonical "
-        "vocabulary the alias table resolves onto.")
+def test_the_archetype_names_manifest_is_on_disk_and_populated():
+    path = os.path.join(SCRIPT_DIR, "archetype_names.json")
+    assert os.path.exists(path), "archetype_names.json is missing"
+    with open(path, encoding="utf-8") as fh:
+        names = json.load(fh)["names"]
+    assert len(names) >= 20 and all(isinstance(n, str) and n.strip()
+                                    for n in names)
+
+
+def test_archetype_working_notes_stay_out_of_the_bundle():
+    """
+    The notes are one person's metagame reading. An end user needs the names,
+    not the notes, and the repo is public.
+    """
+    import package
+    from pathlib import Path
+
+    note = Path("skills/mtg-tournament-analysis/reference/archetypes/"
+                "[C] Izzet Prowess.md")
+    readme = Path("skills/mtg-tournament-analysis/reference/archetypes/README.md")
+    assert not package.should_ship(note)
+    assert package.should_ship(readme)

@@ -178,7 +178,11 @@ written against a deck you didn't look up.
    the format, so they belong in the shipped note.
 4. **If no archetype note exists for the opponent's deck**, say so plainly and build
    the card list from the reveals alone. Don't fabricate an archetype's contents from
-   the name.
+   the name. **This is the normal state on a fresh install**: the notes are local
+   working notes and the plugin ships none of them, only the canonical names in
+   `archetype_names.json`. A review with no note behind it is still a review; it just
+   says which cards it had to learn from the game itself, and writes the note
+   afterwards so the next one starts ahead.
 
 The card that decided the game is the same card the interview's third question is
 about, so this step feeds Step 4 directly.

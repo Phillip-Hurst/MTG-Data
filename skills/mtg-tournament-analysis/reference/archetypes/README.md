@@ -1,18 +1,34 @@
 # Archetype reference notes
 
-One note per Standard archetype: game plan, key cards with verified text, play patterns, and matchup data where it exists.
+**This folder ships empty.** One note per Standard archetype lands here as you build
+them: game plan, key cards with verified text, play patterns, and matchup data from
+your own scrapes.
 
-## What these are for
+## Why it's empty
 
-**These filenames are the canonical archetype vocabulary.** Every source names decks differently — melee lets players type whatever they want, mtgtop8 has its own house style, MTGO publishes nothing at all. Pick any one of them and the same deck ends up under three labels, which splits its win rate three ways and makes the matchup matrix meaningless.
+The notes are a reading of a metagame at a moment, written from one person's scrape of
+melee and MTGO. Shipping someone else's are worse than useless once the format moves,
+and an end user needs none of them to run the plugin. So the plugin carries the
+vocabulary and none of the content.
 
-So one name wins, and it's the one with a note here.
+**`archetype_names.json` at the repo root is the canonical vocabulary.** Every source
+names decks differently: melee lets players type whatever they want, mtgtop8 has its
+own house style, MTGO publishes nothing at all. Pick any one of them and the same deck
+lands under three labels, which splits its win rate three ways and makes the matchup
+matrix meaningless. So one name wins, and it's the one in that file.
 
-`mtg_stats.ARCHETYPE_ALIASES` maps every other spelling onto these names. `audit_refs.py --apply-aliases` collapses duplicate references onto them. A test fails if an alias ever points at a name that has no note in this folder — that's how "Izzet" briefly got mapped to "Izzet Elementals", which had no note, while "Izzet Spellementals" did.
+`mtg_stats.ARCHETYPE_ALIASES` maps every other spelling onto those names. A test fails
+if an alias ever points at a name the manifest doesn't carry — that's how "Izzet"
+briefly got mapped to "Izzet Elementals", which nothing recognised, while "Izzet
+Spellementals" was the real name.
 
-## Adding one
+## Filling it
 
-A new archetype earns a note when it's a real deck rather than a spread of brews. `card_signal.py --lens unnamed` finds the candidates: a group sharing a core, with a pilot count and a finishing record.
+`mtg-tournament-analysis` Step 5 writes a note here after any session that produces
+matchup data. `deck-check` writes one when it names a new archetype, and adds the name
+to `archetype_names.json` in the same move. `vod-review` adds cards and interactions it
+verified while reviewing a game, and may add a clearly-labelled personal-experience
+section that never counts as data.
 
 ```markdown
 ---
@@ -29,9 +45,13 @@ tags: [mtg, standard, archetype, ...]
 
 Then the game plan, a key-cards table, and the record.
 
-**Card text comes from Scryfall, always.** A note full of cards described from memory is worse than a short one — it reads as authoritative and isn't. Where a card hasn't been verified, say so in the note rather than guessing.
+**Card text comes from Scryfall, always.** A note full of cards described from memory
+is worse than a short one: it reads as authoritative and isn't. Where a card hasn't
+been verified, say so in the note rather than guessing.
 
-Once the note exists, add the alias in `mtg_stats.py` so every source's spelling resolves to it.
+A new archetype earns a note when it's a real deck rather than a spread of brews.
+`card_signal.py --lens unnamed` finds the candidates: a group sharing a core, with a
+pilot count and a finishing record.
 
 ## Two kinds of section, and the precedence between them
 
@@ -39,12 +59,12 @@ Once the note exists, add the alias in `mtg_stats.py` so every source's spelling
 from a counted pool of matches, and both are rebuilt from CSVs rather than edited by
 hand.
 
-`vod-review` may add two things after reviewing one of the user's own matches:
+`vod-review` may add two things after reviewing one of your own matches:
 
 - **Cards and interactions**, into `## Key cards` and `## Key tricks and
   interactions`, with text verified on Scryfall. These are facts about the format.
 - **`## Personal experience (small sample, not tournament data)`**, a short record of
-  the user's own games with the sample size in the header.
+  your own games with the sample size in the header.
 
 **The precedence rule is absolute: the matchup table wins.** Personal experience never
 moves a number in it, never gets merged into it, and never gets quoted as a win rate.
@@ -52,6 +72,8 @@ A 1-2 in a single match is one data point about one match. It earns a place here
 the texture the numbers don't carry — which card actually beat you, which sideboard
 card was blank — and nothing more.
 
-## Provenance
+## These notes stay local
 
-These are the working notes from the vault they were built in, shipped as-is. They carry their own dates and sources. Some are thorough, some are stubs with the card table filled in and the game plan still open — the front matter and the "Open" sections say which.
+`.gitignore` keeps `[C] *.md` in this folder out of the repo, and `package.py` keeps
+them out of the bundle. They're your working notes about your metagame. Nothing here
+needs to travel.

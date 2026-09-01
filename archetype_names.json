@@ -1,0 +1,30 @@
+{
+  "_comment": "Canonical Standard archetype names. Every source's spelling resolves onto one of these through mtg_stats.ARCHETYPE_ALIASES. Add a name here when deck-check names a new archetype.",
+  "names": [
+    "Azorius Flash",
+    "Azorius Momo",
+    "Bant Airbending",
+    "Boros Artifacts",
+    "Boros Dragons",
+    "Dimir Excruciator",
+    "Dimir Midrange",
+    "Four-Color Control",
+    "Four-Color Rhythm",
+    "Golgari Midrange",
+    "Golgari Ouroboroid",
+    "Izzet Lessons",
+    "Izzet Prowess",
+    "Izzet Spellementals",
+    "Izzet Tempo",
+    "Jeskai Control",
+    "Mardu Discard",
+    "Mono Green Landfall",
+    "Orzhov Lifegain",
+    "Rakdos Aggro (Lizard Deck)",
+    "Rakdos Monument",
+    "Selesnya Landfall",
+    "Selesnya Ouroboroid",
+    "Simic Omniscience",
+    "Sultai Control"
+  ]
+}

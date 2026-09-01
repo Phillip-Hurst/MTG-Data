@@ -15,21 +15,23 @@ checkout. It produces a zip whose root is the plugin directory layout:
     mtg-data/
       .claude-plugin/plugin.json
       skills/mtg-tournament-analysis/SKILL.md
-      skills/mtg-tournament-analysis/reference/archetypes/*.md
+      skills/mtg-tournament-analysis/reference/archetypes/README.md
       skills/deck-check/SKILL.md
       *.py, set_releases.json, mtg_config.json, bans.json, setup.bat
       README.md, LICENSE
 
 What it deliberately leaves out: scraped data (CSV/JSON the scrapers write),
 run logs, dev and probe scripts, the test suite, transcripts, baselines, the
-personal vault notes at the repo root, and vod-review's play ledger.
+personal vault notes at the repo root, vod-review's play ledger, and the
+archetype working notes. Those last ones are one person's reading of a
+metagame; what an end user needs is the canonical name list in
+archetype_names.json, and that does ship.
 
 Exclusion is decided on the *relative path*, not the bare filename. An earlier
 version tested the filename only, so every .md that was not literally called
-SKILL.md was dropped, which silently excluded all 25 shipped archetype notes.
-Those notes are the canonical archetype vocabulary, so the bundle was broken in
-exactly the way a passing run cannot show you. `REQUIRED` below now fails the
-build if they go missing again.
+SKILL.md was dropped, which silently excluded the archetype content the bundle
+depended on. The bundle was broken in exactly the way a passing run cannot show
+you. `REQUIRED` below now fails the build if required content goes missing.
 """
 import argparse
 import sys
@@ -83,10 +85,17 @@ EXCLUDE_FILES = {
 }
 
 # Config that SHOULD ship even though it is .json (it seeds a fresh setup).
-KEEP_JSON = {"set_releases.json", "mtg_config.json", "bans.json"}
+KEEP_JSON = {"set_releases.json", "mtg_config.json", "bans.json",
+             "archetype_names.json"}
 
-# The only .md files that ship from the repo root. Everything under skills/
-# ships regardless: that is where the archetype notes live.
+# A bundle carries the plugin, not one person's metagame reading. The archetype
+# notes are working notes: they stay on the author's disk, out of the repo, and
+# out of here. What ships instead is archetype_names.json, the canonical name
+# list every source's spelling resolves onto, which an end user does need.
+EXCLUDE_ARCHETYPE_NOTES = "skills/mtg-tournament-analysis/reference/archetypes"
+
+# The only .md files that ship from the repo root. Everything else under skills/
+# ships regardless: that is where the reference notes live.
 # CLAUDE.md is the plugin router. It ships because a reader who opens the
 # installed plugin should land on the map before a SKILL.md.
 KEEP_ROOT_MD = {"README.md", "CLAUDE.md"}
@@ -104,10 +113,7 @@ REQUIRED = {
         p == Path("skills/rules-check/reference/rules-and-the-stack.md")),
     "rules lookup script": lambda p: p == Path("rules_lookup.py"),
     "play profile script": lambda p: p == Path("play_profile.py"),
-    "archetype notes": lambda p: (
-        p.match("skills/mtg-tournament-analysis/reference/archetypes/*.md")
-        and p.name != "README.md"
-    ),
+    "archetype names": lambda p: p == Path("archetype_names.json"),
 }
 
 
@@ -120,8 +126,13 @@ def should_ship(rel: Path) -> bool:
     if rel.name.endswith((".log", ".txt", ".html", ".csv", ".jsonl")):
         return False
 
-    # Everything under skills/ ships, including reference notes.
+    # Everything under skills/ ships, including reference notes, except one
+    # person's archetype working notes. The folder's README ships so a fresh
+    # install knows what belongs there.
     if rel.parts and rel.parts[0] == "skills":
+        if (rel.as_posix().startswith(EXCLUDE_ARCHETYPE_NOTES)
+                and rel.name != "README.md"):
+            return False
         return True
 
     # The manifest ships; nothing else in .claude-plugin does.
@@ -176,7 +187,13 @@ def main() -> int:
         print("\nOn OneDrive, mark the repo folder 'Always keep on this device'.")
         return 1
 
-    n_notes = sum(1 for p in shipped if REQUIRED["archetype notes"](p))
+    n_names = 0
+    try:
+        import json
+        with open(repo / "archetype_names.json", encoding="utf-8") as fh:
+            n_names = len(json.load(fh).get("names", []))
+    except (OSError, ValueError):
+        pass
 
     if args.dry_run:
         for rel in shipped:
@@ -189,7 +206,8 @@ def main() -> int:
 
     verb = "Would write" if args.dry_run else "Wrote"
     print(f"\n{verb} -> {out_file}")
-    print(f"  {len(shipped)} file(s) shipped, {n_notes} archetype note(s)")
+    print(f"  {len(shipped)} file(s) shipped, {n_names} canonical archetype "
+          f"name(s)")
     print(f"  {len(skipped)} file(s) excluded (data, logs, tests, vault notes)")
 
     # Leak check: anything shipping from the repo root that looks like data.

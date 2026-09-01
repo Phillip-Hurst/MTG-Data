@@ -124,7 +124,9 @@ python audit_refs.py --apply-aliases      # collapse duplicates
 
 `--apply-aliases` collapses labels that `mtg_stats.ARCHETYPE_ALIASES` says are one deck, keeping whichever reference was built from more lists, and backs up to `archetype_refs.pre-alias.json`. Re-run `classify_decks.py --rerun` afterwards so live decks pick up the merged names.
 
-**The canonical name is always one that has an archetype note** — a filename in `skills/mtg-tournament-analysis/reference/archetypes/`. That folder is the vocabulary the matchup tables, snapshots and win-rate numbers are written in. Adding an alias for a name with no note there splits a deck instead of merging it, and a test fails if you try.
+**The canonical name is always one carried by `archetype_names.json`.** That file is the vocabulary the matchup tables, snapshots and win-rate numbers are written in. Adding an alias for a name it doesn't carry splits a deck instead of merging it, and a test fails if you try.
+
+The archetype notes in `skills/mtg-tournament-analysis/reference/archetypes/` are local working notes rather than shipped content, so a fresh install has the names and none of the notes. Never treat a missing note as a missing archetype.
 
 So naming a new deck is two steps, not one: write the note, then add the alias.
 
@@ -143,7 +145,7 @@ A collision the aliases don't resolve is a real question about what a deck *is*,
 That's one archetype with no name, not 37 brews. To bring it in:
 
 1. **Name it** by what the deck does, not by its colours. mtgtop8 filed the Amalia deck as "Orzhov Aggro"; it gains life, so it's Orzhov Lifegain.
-2. **Write the note** in `reference/archetypes/`. Card text from Scryfall — a note describing cards from memory reads as authoritative and isn't. Say which cards are unverified rather than guessing.
+2. **Add the name to `archetype_names.json`**, then **write the note** in `reference/archetypes/`. The manifest is what ships and what the alias test checks; the note is the local detail. Card text from Scryfall — a note describing cards from memory reads as authoritative and isn't. Say which cards are unverified rather than guessing.
 3. **Add the alias** in `mtg_stats.py` so every source's spelling resolves to the new name.
 4. `python build_refs_from_melee.py --rebuild-only` picks it up once enough decks carry the label. Anything it keeps mismatching comes back through the review note.
 
