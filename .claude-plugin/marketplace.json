@@ -10,7 +10,7 @@
       "name": "mtg-data",
       "source": "./",
       "description": "Magic: The Gathering tournament data and gameplay review, from the scrape through to the meta read. Four skills: mtg-tournament-analysis reads the format (meta share, win rates, matchup matrices, card-level signal), deck-check assigns archetype names and pushes them back into the numbers, vod-review breaks down your own games from an untapped.gg replay, a YouTube VOD or a pasted log, and rules-check answers rules questions by quoting the current Comprehensive Rules. vod-review interviews you about the decisions it flagged before it grades any of them, asks whether the archetype's key and rogue cards were in your decision tree, and logs every finding to an append-only play ledger. play_profile.py counts that ledger into a play profile: recurring habits and strengths with the count and the dates behind them, a trend bar of three occurrences across two sessions, pace measured from VOD timestamps or replay duration rather than guessed at, and a discount flag on any habit found mostly because the profile predicted it. Local-first: Playwright scrapers pull melee.gg and MTGO onto your own machine, format eras keep pre-ban results out of post-ban numbers, and your play ledger never leaves your machine. Run setup.py once after install to build the per-format folder tree and wire up scraping.",
-      "version": "1.8.0",
+      "version": "1.8.1",
       "author": {
         "name": "Phillip Hurst",
         "url": "https://github.com/Phillip-Hurst"
