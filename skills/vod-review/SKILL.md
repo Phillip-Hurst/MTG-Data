@@ -68,30 +68,46 @@ review and Step 7 creates one.
 Three sources. They give different things, so ask which one the user has rather than
 assuming.
 
-### Untapped.gg replay (best for your own Arena games)
+### Untapped.gg (best for your own Arena games)
 
-Untapped records full turn-by-turn state: both players' plays, mana available, cards
-drawn, and what was revealed. That's more information than a VOD gives you, because
-you get the actual sequencing rather than a camera pointed at it.
+An untapped match URL is two sources, and they are not interchangeable. **Read
+`reference/untapped-sources.md` before touching either one.** It carries the fetch
+recipe, the field map, and the three traps, one of which has already put a wrong
+finding into a shipped review.
 
-The pages are JavaScript-rendered, so a plain fetch returns a shell. Use the browser
-tools that render JavaScript.
+| Source | What it is | Use it for |
+|---|---|---|
+| **The log** | `api.mtga.untapped.gg/api/v1/upload-log/<shortId>`. The raw MTGA client log. | Every finding in the review |
+| **The replay** | `mtga.untapped.gg/replay/<shortId>`. The JavaScript board viewer. | Seeing a board, screenshots, checking one moment |
+
+**Default to the log.** The replay steps one game state at a time and a three-game
+match runs to hundreds of them. The log is one fetch and holds strictly more: mana
+payments, priority order, counters added, mulligans, both decklists, and every
+sideboard swap without asking the user to remember it.
 
 1. Ask the user for the match or profile URL. Their match history lives under their
    untapped profile; individual matches have their own URL.
-2. Navigate with the browser tools, then read the page as text rather than
-   screenshotting it. The turn log is text, and text is what you need.
+2. Open the replay page with the JavaScript-rendering browser tools, then fetch the
+   log from the page context. The sandbox can't reach the endpoint; the page's origin
+   can.
 3. **The session has to be signed in.** If the page shows a login wall, say so and
    ask the user to sign in rather than trying to work around it. Some breakdowns are
    Premium-gated; if a panel is paywalled, note which one and work from what's
    visible.
-4. Read the whole match, both games, before commenting on any of it. A turn-3
+4. Read the whole match, every game, before commenting on any of it. A turn-3
    decision often only looks wrong once you know what was in the deck.
 
-**What untapped gives you that nothing else does:** the opponent's revealed cards
-across all games of the match, and your own draws in order. That's enough to
-reconstruct what you knew at each decision point, which is the whole basis of the
-review.
+**What the log gives you that nothing else does:** the opponent's revealed cards
+across all games, your own draws in order, and the exact set of lands untapped at
+every point of every turn. That's enough to reconstruct what you knew and what you
+could afford at each decision, which is the whole basis of the review.
+
+**Verify the mana before writing the finding.** "He was tapped out" and "she could
+have paid the {3}" are the sentences reviews turn on, and each one is a specific set
+of lands in a specific message. `isTapped` is omitted rather than set false, so a
+merged object map reports every land as tapped forever. Print the lands, count them,
+cross-check against the `TappedUntappedPermanent` and `ManaPaid` annotations, then
+write.
 
 ### YouTube gameplay VOD
 
@@ -603,6 +619,10 @@ meant to be passed on rather than smoothed over.
   text in the review, and gets added to the archetype note if it wasn't there.
 - **Verify cards on Scryfall.** A review that misstates a card's cost is wrong in the
   one way a review cannot afford.
+- **No mana claim without the tap trace.** Whether someone was tapped out, held a
+  counter up, or could have paid a tax is a specific set of lands in a specific
+  message. Print them and count them. `reference/untapped-sources.md` has the trap
+  that makes every land look tapped, and the annotations that overrule it.
 - **Ask before inferring.** A screenshot with no context, an unreadable card, a
   paywalled panel: ask rather than filling the gap.
 - **The user plays the game.** Present the count and the alternative. Where two lines

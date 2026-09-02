@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.11.0 - 2026-09-02
+
+An untapped match URL is two sources, and `vod-review` now knows which one to read.
+
+### The log, not the replay
+
+- **New `skills/vod-review/reference/untapped-sources.md`.** The replay at `mtga.untapped.gg/replay/<shortId>` is a board viewer that steps one game state at a time; the log at `api.mtga.untapped.gg/api/v1/upload-log/<shortId>` is the raw MTGA client log the viewer is built from. A three-game match is hundreds of game states or one fetch, and the log holds strictly more: mana payments, priority order, counters added, mulligans, both decklists, and every sideboard swap without asking the player to remember it. The note carries the fetch recipe, the brace-matching extraction, the `grpId` to card-name lookup, and the field map for everything a finding needs.
+- **`SKILL.md` Step 1 now names both sources and says which one findings come from.** Default is the log. The replay is for looking at a board, taking a screenshot, or checking one moment the log left ambiguous.
+- **Scryfall is still the authority on cards.** Untapped's `cards.json` resolves names and nothing else. Costs, types and oracle text get verified, because that's what a finding turns on.
+
+### Three traps, one of which already shipped a wrong finding
+
+- **`isTapped` is omitted, not set to false.** Merging game objects across messages with `Object.assign` leaves a stale `isTapped: true` on every land that ever tapped, so every board reads as fully tapped and "he was tapped out" becomes a finding that never happened. That is exactly what happened in the 2026-09-02 UW mirror review: a turn-23 attack was graded a punt for stranding the player with no mana, when he had ended that turn with four lands untapped. Replace the object, don't merge it, and cross-check against `TappedUntappedPermanent` and `ManaPaid`.
+- **The annotation stream is resolution order, not casting order.** A spell cast in response resolves before the ability already on the stack, so reading the stream top-down gets the causality backwards. When a finding turns on priority, walk the window message by message and print the annotations alongside the untapped list.
+- **Object ids get reused.** A name resolved from a stale id map produces lines like "sacrificed Get Lost" for a Map token. Don't write a finding on a single strange event.
+
+### A new rule
+
+- **No mana claim without the tap trace.** "He was tapped out", "she had the counter up", "he could have paid the {3}" are the sentences reviews turn on, and each one is a specific set of lands in a specific message. Print them, count them, then write.
+
 ## 1.10.0 - 2026-09-01
 
 The repo carries the plugin, not one person's metagame reading.
