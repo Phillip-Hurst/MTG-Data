@@ -1,0 +1,157 @@
+{
+  "_about": [
+    "The pattern registry. This is the dimension the play profile counts on.",
+    "",
+    "`kind` is a decision category and there are ten of them. It says what sort of",
+    "decision was being made. It cannot be the thing a habit list counts, because",
+    "every game contains removal-timing decisions, so kind occurrences accumulate",
+    "with games played rather than with mistakes made. A `pattern_id` names the",
+    "recurring behaviour itself, and that is what a profile line reports.",
+    "",
+    "An unknown pattern_id is rejected rather than counted, same discipline as",
+    "mtg_stats.ARCHETYPE_ALIASES. Adding a pattern is a deliberate act: put it",
+    "here, and nowhere else. A habit spelled two ways splits into two habits and",
+    "the count stops meaning anything.",
+    "",
+    "`polarity` is the declared shape of the pattern, and it is documentation",
+    "rather than a verdict. Classification comes from the grade mix in the ledger.",
+    "Where the two disagree the profile says so, because a pattern declared a leak",
+    "that keeps grading correct is either mislabelled here or misgraded there, and",
+    "either way somebody should look."
+  ],
+  "_polarities": ["leak", "strength", "neutral"],
+  "patterns": {
+    "removal-engine-on-sight": {
+      "kind": "removal-timing",
+      "label": "Kills the engine creature on sight, tax and all",
+      "description": "Spends the answer immediately on the card the opponent's deck is built around, accepting a ward or protection cost to do it.",
+      "polarity": "strength"
+    },
+    "removal-spent-on-present-target": {
+      "kind": "removal-timing",
+      "label": "Spends removal on the target in front of him",
+      "description": "Uses the answer on the only legal target available rather than holding it for the threat he already knows is coming.",
+      "polarity": "leak"
+    },
+    "removal-answers-the-enabler": {
+      "kind": "removal-timing",
+      "label": "Answers the enabler rather than the body",
+      "description": "Points the answer at the graveyard, the accelerant or the tutor instead of the creature currently attacking.",
+      "polarity": "strength"
+    },
+    "removal-sequenced-around-protection": {
+      "kind": "removal-timing",
+      "label": "Sequences the answer around the opponent's protection",
+      "description": "Holds a counter to shield the sweeper, or jams the tutor under a protection spell already on the stack, so the answer lands where it can't be blanked.",
+      "polarity": "strength"
+    },
+    "removal-cheapest-legal-answer": {
+      "kind": "removal-timing",
+      "label": "Picks the cheapest legal answer and keeps the better one live",
+      "description": "Chooses between two answers on cost and legality rather than reflex, leaving the more flexible card in hand for the next threat.",
+      "polarity": "strength"
+    },
+    "taps-out-into-open-mana": {
+      "kind": "mana-holding",
+      "label": "Taps out into open mana with an answer stranded in hand",
+      "description": "Commits the whole turn's mana to a threat while the opponent has untapped sources and he is holding interaction he can no longer cast.",
+      "polarity": "leak"
+    },
+    "casts-flash-threat-on-own-turn": {
+      "kind": "mana-holding",
+      "label": "Casts a flash threat on his own main phase",
+      "description": "Deploys a creature with flash at sorcery speed, giving up the end-step window and walking into sorcery-speed removal.",
+      "polarity": "leak"
+    },
+    "spends-turn-on-card-selection": {
+      "kind": "mana-holding",
+      "label": "Spends the turn's mana on card selection and loses the answer window",
+      "description": "Activates a loot or draw effect that eats the mana or discards the interaction, with the answer window still open.",
+      "polarity": "leak"
+    },
+    "holds-mana-acts-on-their-turn": {
+      "kind": "mana-holding",
+      "label": "Holds mana and acts on the opponent's turn",
+      "description": "Passes with mana up and spends it on their turn, on the end step or on declare attackers, where the same card does more.",
+      "polarity": "strength"
+    },
+    "plays-what-the-mana-supports": {
+      "kind": "mana-holding",
+      "label": "Plays the line the tap trace actually supports",
+      "description": "Counts the real sources, including colour and stun counters, and takes the line that is castable rather than the one that looks best.",
+      "polarity": "strength"
+    },
+    "deploys-engine-on-curve": {
+      "kind": "mana-holding",
+      "label": "Deploys the engine on curve and converts it the same turn",
+      "description": "Lands the payoff on schedule and starts generating value immediately instead of holding it for a safer turn.",
+      "polarity": "strength"
+    },
+    "boards-without-an-answer": {
+      "kind": "sideboarding",
+      "label": "Boards into a 60 with no answer to the card that beats him",
+      "description": "Finishes boarding with nothing in the deck that handles the opponent's key card, usually because every answer shares a restriction.",
+      "polarity": "leak"
+    },
+    "cuts-the-narrow-answer-needed": {
+      "kind": "sideboarding",
+      "label": "Cuts the narrow answer the matchup actually needed",
+      "description": "Trims a cheap conditional card because it looks situational, against a deck whose key threats sit exactly in its window.",
+      "polarity": "leak"
+    },
+    "boards-to-their-actual-plan": {
+      "kind": "sideboarding",
+      "label": "Boards to what the opponent's deck actually does",
+      "description": "Matches the swap to the opponent's real plan and curve rather than to the archetype's reputation.",
+      "polarity": "strength"
+    },
+    "cuts-the-tutor-for-the-card-brought-in": {
+      "kind": "sideboarding",
+      "label": "Cuts the tutor that finds the card he just brought in",
+      "description": "Brings in a one-of silver bullet and cuts the copies of the tutor that would have found it.",
+      "polarity": "leak"
+    },
+    "bottoms-the-live-answer": {
+      "kind": "mulligan",
+      "label": "Bottoms the live answer and keeps the blank one",
+      "description": "Puts the card that answers this matchup on the bottom and keeps one that the opponent's costs or card types make dead.",
+      "polarity": "leak"
+    },
+    "keeps-mana-that-cannot-cast-its-spells": {
+      "kind": "mulligan",
+      "label": "Keeps a hand whose mana can't cast its own spells on curve",
+      "description": "Keeps on land count alone, where tapped lands and colourless sources mean the hand's cheapest spell is a turn or more late.",
+      "polarity": "leak"
+    },
+    "ships-the-unfunctional-seven": {
+      "kind": "mulligan",
+      "label": "Ships the seven that cannot function",
+      "description": "Mulligans a hand that can't cast anything, rather than keeping seven cards for their own sake.",
+      "polarity": "strength"
+    },
+    "ships-a-usable-seven": {
+      "kind": "mulligan",
+      "label": "Ships a seven the deck could have used",
+      "description": "Mulligans a functional hand looking for a better one, and goes to six with less than the seven was worth.",
+      "polarity": "leak"
+    },
+    "land-drop-before-a-spell-that-counts-lands": {
+      "kind": "land-sequencing",
+      "label": "Makes the land drop before a spell whose trigger counts lands",
+      "description": "Plays the land first out of habit, changing the count a spell later in the turn reads. CR 305.1 allows the land after the spell resolves.",
+      "polarity": "leak"
+    },
+    "deploys-an-engine-with-nothing-to-fuel-it": {
+      "kind": "lost-turn",
+      "label": "Deploys an engine with nothing on board to fuel it",
+      "description": "Spends turns casting a payoff whose trigger needs a resource that isn't there, so none of the copies ever do anything.",
+      "polarity": "leak"
+    },
+    "trades-the-wrong-piece-into-the-counter": {
+      "kind": "trading",
+      "label": "Trades the wrong piece into the counterspell",
+      "description": "Baits the counter with the cheap creature when a redundant copy in hand made the expensive one the cheaper trade.",
+      "polarity": "leak"
+    }
+  }
+}

@@ -10,7 +10,7 @@ Playwright scrapers run on your machine and pull round-by-round results from mel
 |---|---|
 | `mtg-tournament-analysis` | Reads the format. Meta share, win rates, a colour-coded matchup matrix, what moved week over week, and card-level signal across the field: rogue picks, deviations from an archetype's goto build, adoption trends, and shells nobody has named yet. |
 | `deck-check` | Gets every deck under the right archetype name, and pushes that name into the CSVs the win rates and matchups are actually built from. Reads rulings you mark up in Obsidian, and keeps them across scrapes. |
-| `vod-review` | Reviews your own games from an untapped.gg replay, a YouTube VOD, or a pasted log. Finds the turn the game was actually lost, and judges the line on what you knew at the time rather than on what you drew. Asks what you were thinking before it grades anything, and keeps a running profile of your habits. |
+| `vod-review` | Reviews your own games from an untapped.gg match log, a YouTube VOD, or a pasted log. Finds the turn the game was actually lost, and judges the line on what you knew at the time rather than on what you drew. Asks what you were thinking before it grades anything, and keeps a running profile of your habits. |
 | `rules-check` | Answers a rules question by quoting the current Comprehensive Rules with the rule number. Priority, the stack, triggers, state-based actions, layers. Never from memory. |
 
 The split between the first two is deliberate. Analysis reports the cards performing in a deck it can't name and stops there; naming it is `deck-check`'s job, and that's the step that turns those cards into an archetype with a win rate.

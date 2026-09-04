@@ -10,7 +10,7 @@ description: Analyze Magic: The Gathering Standard tournament results from melee
 | Skill | What it's for | Hand off when |
 |---|---|---|
 | `deck-check` | Assigns the right archetype to mislabeled or uncategorized decks, and pushes that label into the win-rate and matchup data | A deck is under the wrong name, an unnamed shell from `card_signal.py` needs naming, or the user wants to clear the mislabel queue |
-| `vod-review` | Reviews the user's own games from an untapped.gg replay, a YouTube VOD, or a pasted log, and finds the decisions that decided them | The question moves from "what's good" to "how did I play it". Field data says a deck wins 55%; only a review says why this pilot didn't |
+| `vod-review` | Reviews the user's own games from an untapped.gg match log, a YouTube VOD, or a pasted log, and finds the decisions that decided them | The question moves from "what's good" to "how did I play it". Field data says a deck wins 55%; only a review says why this pilot didn't |
 | `rules-check` | Quotes the Comprehensive Rules. Priority, the stack, triggers, state-based actions, layers | An interaction needs a ruling. Never resolve one from memory inside an analysis write-up |
 
 `mtg-price-check` prices a Moxfield binder against Face to Face Games. It is a separate skill and does not ship in this plugin, so point the user at it by name rather than assuming it is installed.

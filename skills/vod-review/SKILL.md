@@ -1,6 +1,6 @@
 ---
 name: vod-review
-description: Review Magic gameplay and find the decisions that decided the game, interviewing the player about their reasoning rather than guessing at it, and building a play profile of their habits over time. Works from an untapped.gg match replay, a YouTube gameplay VOD, a pasted MTGA or MTGO game log, or screenshots. Use when the user wants their own play reviewed, wants to know why they lost a match, wants a line second-guessed, wants a pro's VOD broken down, or wants to know what their recurring habits and leaks are. Trigger on phrasings like "review this match", "why did I lose that game", "was that the right line", "go through my untapped replay", "review my games from last night", "what should I have done on turn 4", "break down this VOD", "did I punt", "review my mulligan decisions", "what are my bad habits", "what do I keep getting wrong", "am I playing too fast", "what should I work on", "show me my play profile", or any request pairing a game, a replay link, or a game log with a question about how it was played.
+description: Review Magic gameplay and find the decisions that decided the game, interviewing the player about their reasoning rather than guessing at it, and building a play profile of their habits over time. Works from an untapped.gg match log, a YouTube gameplay VOD, a pasted MTGA or MTGO game log, or screenshots. Use when the user wants their own play reviewed, wants to know why they lost a match, wants a line second-guessed, wants a pro's VOD broken down, or wants to know what their recurring habits and leaks are. Trigger on phrasings like "review this match", "why did I lose that game", "was that the right line", "go through my untapped replay", "review my games from last night", "what should I have done on turn 4", "break down this VOD", "did I punt", "review my mulligan decisions", "what are my bad habits", "what do I keep getting wrong", "am I playing too fast", "what should I work on", "show me my play profile", or any request pairing a game, a replay link, or a game log with a question about how it was played.
 ---
 
 # vod-review
@@ -16,7 +16,7 @@ habits show up across sessions instead of dying in one note.
 
 | Skill | What it's for | Hand off when |
 |---|---|---|
-| `rules-check` | What the Comprehensive Rules say. Priority, the stack, layers, state-based actions, timing | A line's legality or timing is the question. Never guess at whether a response was possible; go get the rule |
+| `rules-check` | What the Comprehensive Rules say. Priority, the stack, layers, state-based actions, timing | A line's legality or timing is the question, **or a finding rests on when a condition is evaluated.** Never guess at whether a response was possible, or at whether an "if" is an intervening-if; go get the rule and cite its number |
 | `mtg-tournament-analysis` | Meta share, win rates, matchup matrices, card-level signal across the field | The review turns into "is this deck even good" or "what's the field like", or you need the matchup's real win rate to judge how a game *should* have gone. Also where the archetype notes and `card_signal.py` live, which is where the "was this card in the picture?" question in Step 4 gets its card |
 | `deck-check` | Assigns the right archetype name and pushes it into the win-rate data | The opponent's deck needs a name before you can look up the matchup |
 
@@ -59,7 +59,7 @@ faster and more reliable, and it's needed before Step 2 can pull the right arche
 notes. If the user genuinely doesn't know the opponent's deck yet (game still in
 progress, or they forgot), fall back to reading it off the reveals in Step 2.
 
-**Load the play profile now, and don't read the habit list yet.** `[C] Play Profile.md`
+**Load the play profile now, and don't read the pattern list yet.** `[C] Play Profile.md`
 in the insights folder holds the running picture of how this player plays. It gets
 checked in Step 5, after the findings are formed from the game, for the reason spelled
 out in `reference/play-profile.md`. If there's no profile yet, this is the first
@@ -70,44 +70,56 @@ assuming.
 
 ### Untapped.gg (best for your own Arena games)
 
-An untapped match URL is two sources, and they are not interchangeable. **Read
-`reference/untapped-sources.md` before touching either one.** It carries the fetch
-recipe, the field map, and the three traps, one of which has already put a wrong
-finding into a shipped review.
+**Read the logs. Never step the replay viewer.** The viewer costs one browser round
+trip per game state and a three-game match runs to several hundred of them, while the
+log is one fetch that holds strictly more: mana payments, priority order, counters
+added, revealed hands, mulligans, both decklists, and every sideboard swap without
+asking the user to remember it. **Read `reference/untapped-sources.md` before touching
+either endpoint.** It carries the fetch recipe, the field map, the rate limits, and the
+five traps, three of which have already put a wrong finding into a shipped review.
 
 | Source | What it is | Use it for |
 |---|---|---|
-| **The log** | `api.mtga.untapped.gg/api/v1/upload-log/<shortId>`. The raw MTGA client log. | Every finding in the review |
-| **The replay** | `mtga.untapped.gg/replay/<shortId>`. The JavaScript board viewer. | Seeing a board, screenshots, checking one moment |
+| **The index** | `api.mtga.untapped.gg/api/v1/games/users/<userId>/players/<playerTag>/?card_set=<CODE>` | Enumerating matches, results, durations, mulligan counts |
+| **The log** | `api.mtga.untapped.gg/api/v1/upload-log/<shortId>` | Every finding in the review |
 
-**Default to the log.** The replay steps one game state at a time and a three-game
-match runs to hundreds of them. The log is one fetch and holds strictly more: mana
-payments, priority order, counters added, mulligans, both decklists, and every
-sideboard swap without asking the user to remember it.
+Both are fetched from the page context, because the sandbox can't reach them and the
+page's origin can. Any `mtga.untapped.gg` page will do.
 
-1. Ask the user for the match or profile URL. Their match history lives under their
-   untapped profile; individual matches have their own URL.
-2. Open the replay page with the JavaScript-rendering browser tools, then fetch the
-   log from the page context. The sandbox can't reach the endpoint; the page's origin
-   can.
-3. **The session has to be signed in.** If the page shows a login wall, say so and
-   ask the user to sign in rather than trying to work around it. Some breakdowns are
-   Premium-gated; if a panel is paywalled, note which one and work from what's
-   visible.
-4. Read the whole match, every game, before commenting on any of it. A turn-3
-   decision often only looks wrong once you know what was in the deck.
+1. Ask the user for the profile or deck URL. Its path segments are the `userId`,
+   `playerTag` and `friendly_deck_id` the index needs, so one pasted deck URL
+   enumerates every match played with that deck.
+2. Open that page with the browser tools and pull the index. That's the whole match
+   list with per-game results, durations and mulligan counts, in one call, without a
+   single log fetch.
+3. Pull one log per match, throttled. The endpoint 429s under a sustained pull, and a
+   batch outlives the 45-second evaluate timeout, so park the run on `window` and poll
+   it. The reference note has both recipes.
+4. **The session has to be signed in.** If a page shows a login wall, say so and ask
+   the user to sign in rather than trying to work around it.
+5. Read the whole match, every game, before commenting on any of it. A turn-3 decision
+   often only looks wrong once you know what was in the deck.
 
-**What the log gives you that nothing else does:** the opponent's revealed cards
-across all games, your own draws in order, and the exact set of lands untapped at
-every point of every turn. That's enough to reconstruct what you knew and what you
-could afford at each decision, which is the whole basis of the review.
+**Two passes, and the split is what keeps a large cluster affordable.** Pass one turns
+every game into a line-per-event digest and produces *candidates only*. Pass two
+re-parses one match and prints the annotation stream, tap state, `ManaPaid` and any
+`RevealedCard*` for the two or three turns in question. A candidate becomes a finding
+only after that trace, and the trace kills roughly half of them.
 
 **Verify the mana before writing the finding.** "He was tapped out" and "she could
 have paid the {3}" are the sentences reviews turn on, and each one is a specific set
-of lands in a specific message. `isTapped` is omitted rather than set false, so a
-merged object map reports every land as tapped forever. Print the lands, count them,
-cross-check against the `TappedUntappedPermanent` and `ManaPaid` annotations, then
-write.
+of lands and nonland sources in a specific message. `isTapped` is omitted rather than
+set false, so a merged object map reports every land as tapped forever. Print the
+sources, count them, cross-check against the `TappedUntappedPermanent` and `ManaPaid`
+annotations, then write.
+
+**Label plays by the card's owner, not by the active player.** `turnInfo.activePlayer`
+marks every instant the opponent casts on your turn as yours, which has already put an
+opponent's removal spell into a review as the player's own play. Track `ownerSeatId`
+from `gameObjects[]` and carry it across `ObjectIdChanged`.
+
+The replay viewer opens for one reason only: the user asked to see a board, or the log
+endpoint 404s on an incomplete upload. Say which one it is.
 
 ### YouTube gameplay VOD
 
@@ -170,6 +182,36 @@ which one you were facing.
 of the plugin. This matters more in a review than anywhere else, because a review
 turns on exact costs and exact text: whether the counterspell could have been held
 up, whether the removal spell answered the threat, whether the trigger was optional.
+
+### Reading a card is not the same as reading its text
+
+Oracle text gets you the words. A finding needs the words applied to the actual game
+state at the actual moment, and that's where reviews go wrong. Four checks, in order:
+
+1. **Split a conditional ability into one clause per condition, and evaluate each
+   against the state at the moment it's checked.** A card that reads "do A if X, do B
+   if Y, do C if Z" is three independent questions, not one. Beza, the Bounding Spring
+   has four, and in the 2026-09-04 Boros Dragons review two of them were graded as a
+   block, which produced a wrong finding twice in a row.
+2. **Work out when the condition is read.** An "if" immediately after the trigger
+   condition is an intervening-if and is checked twice, on trigger and on resolution
+   (CR 603.4). An "if" anywhere else is ordinary English, read once as the ability
+   resolves and follows its instructions in written order (CR 608.2c). The difference
+   decides whether an action taken earlier in the turn mattered.
+3. **Ask what the player could still have done afterwards.** Land drops are the one
+   that gets missed: CR 305.1 allows a land any time its controller has priority in
+   their main phase with the stack empty, so "cast the spell, resolve it, then play
+   the land" is legal and is often the line. A trigger that counts lands or cards in
+   hand is decided by that order.
+4. **Count mana from `ManaPaid`, never from lands in play.** See trap 0 in
+   `reference/untapped-sources.md`. Stun counters, colourless-only lands and lands
+   that entered tapped this turn all break the naive count.
+
+**Hand it to `rules-check` when the finding rests on the rule rather than the read.**
+Anything involving an intervening-if, a replacement effect, priority, layers, or a
+state-based action goes there before the grade is written, and the review cites the
+rule number it got back. A grade built on a remembered rule is the one kind of error
+the player has no way to check.
 
 ### Build the card list before you grade anything
 
@@ -255,7 +297,7 @@ Most turns have no decision worth reviewing. Look for these.
 | **Trading vs going wide** | Did the trade progress your plan or just clear a board you were winning? |
 | **Removal timing** | Was the spell spent on the first target or saved for the real one? Name the real one. |
 | **Combat math** | The attack that was and wasn't made. Show the numbers. |
-| **Sideboarding** | Which cards came out, and did the plan match what the opponent actually showed? |
+| **Sideboarding** | Which cards came out, and did the plan match what the opponent actually showed? **Every post-board game is its own decision.** Game 2 and game 3 are boarded separately, off different information, so grade them separately. A card cut for game 2 and brought back for game 3 is the player correcting themselves mid-match, and that only shows up if both games got looked at. |
 | **The turn the game was lost** | Usually two or three turns before the game ended. Find it. |
 
 **The turn the game was lost is rarely the last turn.** By the time the lethal attack
@@ -286,8 +328,8 @@ variance, `land-light` that came out `neither` is still a bad keep that got bail
 out. Both vocabularies are fixed and live in `reference/play-profile.md`.
 
 **Note the pace tells as you read, and measure pace if the source lets you.** A VOD
-gives real seconds per turn from the timestamps. Untapped gives game duration over
-turn count. A pasted log gives nothing, and that's a fine answer. The tells worth
+gives real seconds per turn from the timestamps. Untapped gives each game's
+`game_duration_seconds` from the index, divided by the log's turn count. A pasted log gives nothing, and that's a fine answer. The tells worth
 recording (tapped the wrong mana, cast a spell before the land drop that would have
 enabled a better one, missed a trigger, attacked before the pump was available) are
 listed in `reference/play-profile.md`. One tell is noise.
@@ -395,13 +437,13 @@ needs to hit two of the next three draws" is a review. Do the counting.
 
 ### Now check the profile
 
-Findings are formed. Open `[C] Play Profile.md` and check its habit list against this
-match. Anything the profile predicted and this game supports gets flagged as such in
-the ledger, so the count can be discounted later for confirmation bias.
+Findings are formed. Open `[C] Play Profile.md` and check its pattern list against this
+match. Anything the profile predicted and this game supports gets `prompted_by_profile`
+in the ledger, so the count can be discounted later for confirmation bias.
 
-**Say it when the profile is wrong about this game.** "Your profile says removal
-timing, and this game doesn't show it" is a useful sentence, and a profile nothing can
-contradict has stopped being a measurement.
+**Say it when the profile is wrong about this game.** "Your profile says you tap out
+into open mana, and this game doesn't show it" is a useful sentence, and a profile
+nothing can contradict has stopped being a measurement.
 
 ---
 
@@ -416,7 +458,7 @@ type: solution
 project: MTG Tournament Analysis Skill
 date: YYYY-MM-DD
 tags: [mtg, vod-review, {your-deck-slug}]
-source: {untapped match URL | YouTube video ID | pasted log}
+source: {untapped:<shortId> per match | YouTube video ID | pasted log}
 era: {output of mtg_era.py}
 ---
 
@@ -467,8 +509,27 @@ with the turn they happened on. Nothing here if there's nothing to say.}
 
 ## Sideboarding
 
-{What came in and out, against what the opponent actually showed. Reference the
-archetype note's sideboard section if there is one.}
+{Say where the lists came from. A diff of the decklists in the log is evidence; what
+the player remembers boarding is testimony, and the two disagree more often than
+you'd think.}
+
+**Game 2, in:** {cards} **Out:** {cards}
+
+**Game 3, in:** {cards} **Out:** {cards}
+
+**Game 2 — {Punt | Close | Correct}** {The swap against what the opponent had shown
+by the end of game 1. Name the cut that's worth arguing about, and the honest case for
+the card they kept instead. Reference the archetype note's sideboard section if there
+is one.}
+
+**Game 3 — {Punt | Close | Correct}** {Same, against what game 2 added. If a card
+came back in, say whether it did anything, and grade the correction rather than
+re-grading the original cut.}
+
+**One graded block per post-board game.** Two games boarded off different information
+are two decisions, and collapsing them into one paragraph hides the case where the
+player already fixed it themselves. If a game's boarding genuinely has nothing to
+grade, say that in a line rather than dropping the heading.
 
 ## The pattern
 
@@ -490,34 +551,82 @@ read once and changes nothing.
 The review is written. Now make it count toward the next one.
 
 **Append to the ledger, then run the script. Don't count by hand.** `play_profile.py`
-does the arithmetic, applies the trend bar, and rewrites the profile note. Counting
-from memory across a dozen review notes is how a habit list turns into a vibe.
+does the arithmetic, applies the bar, and rewrites the profile notes. Counting from
+memory across a dozen review notes is how a habit list turns into a vibe.
+
+**The prose you just wrote stays in the review note.** The ledger line carries ids,
+enums, counts and a `review_note` pointer, and the profile cites the note rather than
+quoting it. Copying the account of a decision into the ledger and then into two
+profile notes on top of that is what made the profile 59% quoted play-by-play.
 
 1. **Append one line per game to `play_log.jsonl`** in the insights folder. One object
-   per game, not per match. The schema and the fixed `kind` vocabulary are in
-   `reference/play-profile.md`. Never invent a `kind` inline; a habit spelled three
-   ways splits into three habits, and the script rejects the line rather than counting
-   it under a name nothing else uses.
+   per game, not per match. The full schema is in `reference/play-profile.md`.
+
+   **Every finding names a `pattern_id` from `play_patterns.json`.** That registry is
+   the vocabulary the profile counts, and an id that isn't in it gets the line
+   rejected rather than counted under a name nothing else uses. If the behaviour you
+   found genuinely isn't in the registry, add it there first, with a `kind`, a
+   `label`, a `description` and a `polarity`, and say in the review that you did.
+   Never invent one inline.
+
+   **`kind` is not the thing that counts.** It's the coarse category and it has to
+   match the pattern's own kind. Counting kinds measures how much Magic someone has
+   been playing, because every game contains removal-timing decisions.
+
+   **Every finding carries a `phase`**: `mulligan-blind`, `mulligan-post-board`,
+   `sideboard`, or `in-game`. A `turn` belongs on `in-game` findings only, and it
+   has to be a real turn number. The phase has to agree with the game number, and
+   the script checks: a blind mulligan is game 1, and boarding happens between
+   games.
+
+   **The two mulligans are two different decisions, so grade them differently.** A
+   game 1 keep is made in the dark and can only be judged against the format. A
+   game 2 or 3 keep is made knowing the matchup, and the same six cards can be a
+   keep in one and a ship in the other. The 2026-09-01 Izzet Spellementals punt
+   exists only because two games had already shown that their whole battlefield
+   costs two and three: blind, bottoming Erode is a close call. **A finding whose
+   argument rests on information the player didn't have yet is a blind keep graded
+   as an informed one.**
+
    **Every line carries its `hand`** — the cards kept, the land count, the shape, and
    the outcome. The script rejects a hand whose card list disagrees with `kept_at`,
-   because a hand transcribed wrong still gets counted, and the count is the point. A
-   game whose source genuinely never showed the opening hand is the only line that
-   ships without one, and the review says which game that was.
+   and it needs `lands`. Count them off the card list with every card's type
+   verified, because a hand transcribed wrong still gets counted. A game whose source
+   genuinely never showed the opening hand is the only line that ships without one,
+   and the review says which game that was.
+
    **Games two and three carry `sideboard`** — what came in, what went out. That's how
    "this card comes in every time and has never mattered" becomes a countable claim
-   instead of a feeling.
+   instead of a feeling. Diff the decklists in the log rather than trusting either
+   player's memory, and check the counts balance: an in-list shorter than the out-list
+   means a card got missed.
+
+   **Games two and three each carry their own `sideboarding` finding** when there's
+   something to grade, on the game whose boarding it was. One finding per post-board
+   game, never one per match. Two games are boarded off different information, so a
+   single row hides both the second decision and the case where the player corrected
+   the first one. Where they did correct it, the game 2 row is where the finding goes,
+   and the `note` says the correction landed in game 3 — that keeps one decision at
+   one occurrence instead of counting it twice.
+
+   **`session_id` and `match_id` are recorded, not derived.** `session_id` is the date
+   plus an ordinal (`2026-09-04.1`), so a second sitting the same day is `.2` rather
+   than collapsing into the first. `match_id` is the untapped shortId, `yt:<videoId>`,
+   or anything stable for a pasted log, and `(match_id, game)` has to be unique across
+   the ledger.
+
 2. **Run the rollup.** It reads the ledger and rewrites `[C] Play Profile.md` plus one
    `[C] Play Profile - {deck}.md` per deck in the ledger.
 
-   **Two layers, on purpose.** The deck note holds that deck's habits, its matchup
+   **Two layers, on purpose.** The deck note holds that deck's patterns, its matchup
    record, its boarding, and its kept hands. The cross-deck note holds only what has
    shown up with two or more decks, because a habit seen on one deck might be the
    archetype rather than the player. When the cross-deck note is thin and the deck
-   notes aren't, that's the system working, not a bug. Say which layer a finding came
-   from when you report it.
+   notes aren't, that's the system working. Say which layer a finding came from when
+   you report it.
 
    ```bash
-   python play_profile.py                 # roll up, write the profile
+   python play_profile.py                 # roll up, write the profiles
    python play_profile.py --validate      # check the ledger, write nothing
    python play_profile.py --dry-run       # print the profile, write nothing
    python play_profile.py --json          # the counts, for answering a question
@@ -527,33 +636,59 @@ from memory across a dozen review notes is how a habit list turns into a vibe.
 3. **Read the exit code and repeat what it said.** `0` clean, `1` couldn't run,
    `2` ran and found ledger lines it couldn't use. On `2`, fix the lines it named and
    run it again, and say in the review that the counts understate until then.
-4. **Report what moved.** How many games the ledger holds now, and which habits changed
-   bucket. A silent update looks exactly like one that didn't happen.
+   **A rejected line is not a game that lacked the data.** The validator says which
+   is which, and repeating that distinction is the point of reading the output.
+4. **Report what moved.** How many games the ledger holds now, and which patterns
+   changed bucket. A silent update looks exactly like one that didn't happen.
 
-**Never hand-edit the profile note.** It's a view of the ledger, regenerated on every
+**Never hand-edit a profile note.** It's a view of the ledger, regenerated on every
 run, and an edit to it is gone the next time the script runs. Corrections go into the
 ledger line.
 
 ### What the script decides, so the review doesn't have to
 
-| Rule | Value |
+One pattern lands in exactly one bucket. Nothing appears twice.
+
+| Bucket | Rule |
 |---|---|
-| Deck habit | Clears the trend bar with one deck. Lives in that deck's note only |
-| Player habit | Clears the trend bar **and** appears with 2 or more decks |
+| **Leak** | Cleared the bar, and `punt` and `close` outnumber `correct` |
+| **Strength** | Cleared the bar, and `correct` outnumbers `punt` and `close` |
+| **Mixed** | Cleared the bar, and the two tie |
+| **Watching** | 2 or more occurrences that didn't clear the bar. Counted, not concluded |
+| **Below the bar** | 1 occurrence. Stays in the review note, never reaches the profile |
+| **Faded** | Cleared the bar once, then absent from the last 2 sessions **in which that deck was played** |
+
+Both profile notes open with an **At a glance** table: one row per pattern that
+cleared the bar, with its classification, its count and its grade split. That
+table is the answer to "what am I good at and what am I bad at", and the sections
+under it carry the argument and the citations.
+
+| Other rule | Value |
+|---|---|
+| The bar | 3 or more occurrences across 2 or more sessions |
+| Deck pattern | Cleared the bar with one deck. Lives in that deck's note only |
+| Player pattern | Cleared the bar **and** appeared with 2 or more decks |
 | Personal matchup record | An anecdote under 20 games. Never a win rate, never beats the archetype note's table |
-| Trend | 3 or more occurrences across 2 or more sessions |
-| Watching | Exactly 2 occurrences, counted with no conclusion drawn |
-| Below the bar | 1 occurrence. Stays in the review note, never reaches the profile |
-| Faded | Cleared the bar once, absent from the last 2 sessions. Kept, with the date |
-| Strength | 3 or more `correct` grades across 2 or more sessions, outnumbering the rest |
-| Discount flag | More than half a habit's findings were `prompted_by_profile` |
+| Discount flag | More than half a pattern's findings were `prompted_by_profile` |
+| What to work on | The leak with the highest problem score, where a `punt` counts double a `close`. Ties break on occurrences, then `pattern_id`. A strength is never eligible, nor is a flagged pattern |
+| Registry conflict | A pattern declared `leak` that grades as a strength, or the reverse. Printed and named, because one of the two is wrong |
 
 Two occurrences on one night is one bad night, which is why sessions are counted
-separately from games. A flagged habit is never offered as the thing to work on.
+separately from games. A deck sitting in its box doesn't fade its habits, which is why
+fade is measured against the sessions where that deck was actually played.
 
-**Neither the ledger nor the profile ships, and neither goes in the repo.** They're the
-user's play history, and the repo is public. `package.py` and `.gitignore` both exclude
-them, with a test pinning it.
+**Three rankings for the work-on line have failed here, so don't reinvent it.** Raw
+occurrences promoted the best habit to the top of the list of things to fix, because a
+decision type someone keeps getting right accumulates occurrences fastest. Unweighted
+punt-and-close then named a pattern with 6 closes and 0 punts. Grouping by `kind` made
+every label read "removal-timing decisions (16 wordings)" and put the same row under
+trends and strengths at once. When no leak has cleared the bar, the line says so and
+names nothing.
+
+**The ledger and the profile notes don't ship and don't go in the repo.** They're the
+user's play history and the repo is public. `package.py` and `.gitignore` both exclude
+them, with a test pinning it. `play_patterns.json` does ship: it's a vocabulary of how
+Magic decisions go wrong, true regardless of who was holding the cards.
 
 ---
 
@@ -606,8 +741,11 @@ meant to be passed on rather than smoothed over.
   account and the line disagree, say so.
 - **No pace claim without a measurement.** A timestamp, a duration, something they
   said, or two tells in one game. Losing is not evidence about speed.
-- **No trend without a count.** Three occurrences across two sessions, or it isn't a
-  trend yet.
+- **No pattern without a count.** Three occurrences across two sessions, or it hasn't
+  cleared the bar yet. Two is Watching and one stays in the review note.
+- **A pattern, not a sentence.** Every finding names a `pattern_id` from
+  `play_patterns.json`. A behaviour described in fresh words each time cannot be
+  counted, and the profile ends up printing every wording it saw.
 - **Don't manufacture mistakes.** Some games are unwinnable and some lines are just
   right. Say so. The same goes for habits: a clean profile is a legitimate result.
 - **Cite the turn.** Every finding names a turn number, and a timestamp too when the

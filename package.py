@@ -85,8 +85,12 @@ EXCLUDE_FILES = {
 }
 
 # Config that SHOULD ship even though it is .json (it seeds a fresh setup).
+# play_patterns.json is vod-review's pattern registry: general facts about how
+# Magic decisions go wrong, true regardless of who was holding the cards. It is
+# not optional. play_profile.py exits 1 without it, so a bundle that drops it
+# installs cleanly and then refuses to run.
 KEEP_JSON = {"set_releases.json", "mtg_config.json", "bans.json",
-             "archetype_names.json"}
+             "archetype_names.json", "play_patterns.json"}
 
 # A bundle carries the plugin, not one person's metagame reading. The archetype
 # notes are working notes: they stay on the author's disk, out of the repo, and
@@ -113,6 +117,7 @@ REQUIRED = {
         p == Path("skills/rules-check/reference/rules-and-the-stack.md")),
     "rules lookup script": lambda p: p == Path("rules_lookup.py"),
     "play profile script": lambda p: p == Path("play_profile.py"),
+    "play pattern registry": lambda p: p == Path("play_patterns.json"),
     "archetype names": lambda p: p == Path("archetype_names.json"),
 }
 

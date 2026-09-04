@@ -1,5 +1,153 @@
 # Changelog
 
+## 1.15.0 - 2026-09-04
+
+Blind mulligans and informed mulligans are two decisions, the profile opens with
+one classification table, and four grades changed after an audit against the
+review notes.
+
+### A game 1 mulligan is made in the dark
+
+- **`phase` splits into `mulligan-blind` and `mulligan-post-board`.** A game 1 keep can only be judged against the format. A game 2 or 3 keep is judged against a deck already seen, and the same six cards can be a keep in one and a ship in the other. Grading them together averages a blind decision with an informed one and reports the mean as a habit.
+- **The 2026-09-01 Izzet Spellementals punt is the case that proves it.** Bottoming Erode off a two-land six was a punt entirely because two games had already shown that their whole battlefield costs two and three. Blind, it is a close call about a one-mana instant against an unknown deck.
+- **A phase has to agree with its game number**, and the script checks. A blind mulligan is game 1; boarding happens between games. A phase that disagrees means one of the two is wrong and the finding lands in the other kind's counts.
+- **New `## Mulligans` section** in both profile notes, and `rollup["hands"]["by_knowledge"]` splits the kept hands into blind and post-board with their own record, mean lands, sizes and outcomes. `--hands` labels every row.
+- **A pattern's own count stays whole**, and its line reports the phase mix instead. Splitting the counts as well would put a two-occurrence habit below the bar twice and report neither.
+- What it surfaced on the first run: all 6 graded mulligans split 3 blind and 3 post-board, and **both punts are post-board**. Blind keeps grade 2 close and 1 correct across 25 hands; post-board keeps grade 2 punt and 1 close across 13. The 14-11 against 4-9 record split is confounded, because you only reach game 3 after a split, but the grades are not.
+
+### One table for strengths and weaknesses
+
+- **Both profile notes open with `## At a glance`:** one row per pattern that cleared the bar, with its classification, kind, count, grade split and deck count. Sorted leaks first. The per-bucket sections below still carry the argument and the citations.
+
+### The grade audit
+
+Four grades changed, each read against the five review notes rather than the
+one-line ledger note. The test applied: does the note name a better line and
+offer no counter-argument? Then it is a punt. Does it argue the other side? It
+stays a close. Was no better line available with the cards in the 75? Then it is
+correct-and-lost-anyway.
+
+- **UW mirror g2 t10, `casts-flash-threat-on-own-turn`: close to punt.** The note says "There's no version of this turn where main-phasing her is better" and then grades it a close because Erode killed her either way. That second half is outcome reasoning, which is the one thing the skill exists to forbid.
+- **UW mirror boarding, `boards-without-an-answer`: close to correct.** The note says the absence of an answer to an indestructible Captain Marvel is "true of the 75, not just the 60". If no configuration of the 75 answers it, the boarding was not the error and the deckbuilding is the finding.
+- **Charbelcher g2 and g3, `cuts-the-tutor-for-the-card-brought-in`: close to punt, both.** The note names the better line, argues no other side, and records it as "a 15 you decided on rather than a slip".
+- Buckets and the work-on line are unchanged by all four, which is the result you want from an audit: the grades got more honest without the conclusions moving.
+- 6 new tests, 163 passing.
+
+## 1.14.0 - 2026-09-04
+
+The play profile counts patterns instead of decision categories. Found by
+reviewing what the profile actually said after 41 games: four "trends", every
+one of them labelled `removal-timing decisions (16 wordings)` or its
+equivalent, with `removal-timing` listed as a trend and a strength in the same
+note.
+
+### The habit is now an entity
+
+- **New: `play_patterns.json`**, the pattern registry. Every finding names a `pattern_id` from it, and that is what the rollup counts. 22 patterns seeded from the 46 findings already in the ledger. It ships, because a pattern is a general fact about how Magic decisions go wrong rather than a fact about one player, and `play_profile.py` exits 1 without it.
+- **`kind` was never able to do this job.** Every game contains removal-timing decisions, so kind occurrences accumulate with games played rather than with mistakes made: any kind clears a three-occurrence bar within a few sessions no matter how well someone played. Kind stays as the coarse category, and a finding's kind has to match its pattern's.
+- **`_label_for` is gone**, along with the two tests that pinned its fallback. A label built by guessing at the most common free-text wording can never find a majority when every finding is worded once, which is why all four headings read "(N wordings)".
+- **An unknown `pattern_id` is rejected, not counted.** Same discipline as `mtg_stats.ARCHETYPE_ALIASES`, for the same reason.
+- **`polarity` in the registry is checked against the grades.** A pattern declared a leak that keeps grading correct gets a **Registry disagrees with the grades** section naming it, because one of the two is wrong.
+
+### One pattern, one bucket
+
+- **Leak, strength, mixed, watching, below-bar or faded. Exactly one.** The old code computed "trend" and "strength" independently off the same row and could print both, which it did on 2026-09-04.
+- **A punt counts double a close in the work-on ranking.** Weighting them equally named a pattern with 6 closes and 0 punts as the thing to work on. Three rankings have failed here now, so the reference note carries all three.
+- **Fading is measured against the sessions where that pattern's deck was played.** Measuring against all recent sessions faded every Yawgmoth pattern the moment three UW sessions went by, which reports a habit as cured on no evidence.
+
+### The prose stops at the review note
+
+- **Nothing quotes the ledger any more.** A finding carries `pattern_id`, `grade`, a `review_note` pointer and an optional `note` capped at 300 characters that is never rolled up. Every profile line ends in a **Read it in:** citation instead.
+- The cross-deck profile went from 11.2 KB to 6.4 KB. `--json` went from 53.4 KB to 18.5 KB, having been *larger* than the 45.9 KB ledger it summarised, and now drops single-occurrence patterns and the card-for-card hand index. `--json --full` restores them.
+
+### The schema is closed, and it was silently dropping data
+
+- **An unrecognised key is a problem, not a passing value.** The 2026-09-04 review wrote `opening_hand` where the schema says `hand`, for all three games of a match. Those rows validated clean, the run exited 0, and the hand count reported "35 of 41", which reads as six games whose source never showed a hand. Three of them were transcription loss. Recovered: 38 of 41 now.
+- **`(match_id, game)` has to be unique.** Appending the same game twice doubled every count it touched and nothing could see it happen.
+- **`session_id` is recorded, not derived from `date`.** The trend bar rests on it, and two sittings in one day used to collapse into one while a session past midnight split into two.
+- **`turn` belongs to an `in-game` finding only**, with a new `phase` of `mulligan`, `sideboard` or `in-game`. It used to be a required integer with 0 for "before the game started", and the profile printed `Turns: 0, 0, 0, 0, 0, 0, 0, 0`.
+- **`--validate` distinguishes a rejected row from a game that lacked the data.** Folding the two together is what made the hand gap look legitimate.
+- `package.py` gains `play_patterns.json` in `KEEP_JSON` and in `REQUIRED`. Without the first, the `.json` suffix rule dropped it and the bundle installed cleanly and then refused to run.
+- 29 new tests, 157 passing.
+
+## 1.13.0 - 2026-09-04
+
+The replay viewer is gone from `vod-review` as a reading path, and the log is the
+only source. Found while reviewing a 22-match, 29-game Historic cluster in one
+session, which the old flow could not have afforded.
+
+### The replay viewer was never worth its cost
+
+- **`vod-review` reads the logs and does not step the replay viewer.** The viewer costs one browser round trip per game state and a three-game match runs to several hundred of them. The log is one fetch and holds strictly more. Stepping the viewer to establish a fact the log already carries is now called out as the mistake it is.
+- **The viewer opens for two reasons only:** the user asked to see a board, or the log endpoint 404s on an incomplete upload. The skill has to say which one it is.
+- `reference/untapped-sources.md` is retitled "the index and the log", and every "default to the log" hedge is now a rule.
+
+### New source: the games index, one call for a whole cluster
+
+- **`api.mtga.untapped.gg/api/v1/games/users/<userId>/players/<playerTag>/?card_set=<CODE>`** enumerates every match with per-game results, `game_duration_seconds`, `active_player_id`, opening-hand counts and the bottomed card's `grpId`, without fetching a single log. A pasted deck-page URL carries the `userId`, `playerTag` and `friendly_deck_id` it needs.
+- **`card_set` is required and has to be a real Arena set code.** No "all" value: anything else is a `400 Invalid card set`, a set the account can't see is a `403`. Codes come from `mtgajson.untapped.gg/v1/latest/cards.json`, newest last.
+- **Pace no longer comes from parsing `[UnityCrossThreadLogger]` timestamp headers.** `game_duration_seconds` over the log's turn count is the same `untapped-duration` measure for a fraction of the work. A 0-turn game (immediate concede) gets `measure: "none"`, not a divide by zero.
+- **Mulligans come from the index too.** `player_opening_hands` length greater than 1 means a mulligan, and `player_mulligan_put_on_bottom` names the card. The log's hand snapshots dedupe to the *second* seven rather than the six, so the six is reconstructed as that seven minus the bottomed card. `players[].mulliganCount` is usually absent and is no longer relied on.
+
+### The active player is not the caster (new trap 2)
+
+- **Labelling a `ZoneTransfer` by `turnInfo.activePlayer` marks every instant the opponent casts on your turn as yours.** A Golgari Yawgmoth digest came back showing the player casting Bitter Triumph and Lightning Axe, neither of which is in the deck. They were the opponent's removal, cast during the player's own turn.
+- Label by `ownerSeatId` from `gameObjects[]`, carried across `ObjectIdChanged` alongside `grpId`. Keep the active player as separate information, because "sacrificed on their turn" and "sacrificed on my turn" are different decisions.
+- Trap 4 now also warns that `CounterAdded` targets resolved from a stale id map are unreliable, which is how a +1/+1 counter gets reported as landing on a land.
+
+### The two-pass rule, which is where the token cost lives
+
+- **Pass one produces candidates, never findings.** One parse per match into a line-per-event digest: 40 to 250 lines per game, readable in one call, enough to see the shape of all 29 games.
+- **Pass two traces only the shortlist.** Annotation stream in order, battlefield with tap state, `ManaPaid`, `TappedUntappedPermanent`, `RevealedCard*`, for the two or three turns in question.
+- **A trace killed roughly half the candidates in the first cluster it ran on**, including a confident "he had the uncounterable four-drop and cast a two-drop instead" that the tap trace answered with three mana sources.
+
+### Nonland mana sources have restrictions, and they flip findings
+
+- Added to trap 0: **Delighted Halfling** makes any colour but only for a legendary spell, **Phyrexian Tower** makes `{C}` or `{B}{B}` and can never pay a green activation cost, and **Badgermole Cub** adds its extra `{G}` only when a creature is tapped for mana, which a sacrifice-for-mana land does not do. Each of these decided a line in the first cluster.
+
+### Hand-reveal effects are gradeable
+
+- **`AnnotationType_RevealedCardCreated` gives the opponent's full hand** on a Thoughtseize or a Duress, one annotation per card, followed by their `ZoneType_Hand` with the taken card gone. That is the only way to grade the choice, and it has to be graded on that hand plus their available mana, never on what they drew afterwards. A Thoughtseize that left a Goblin Charbelcher behind graded `correct` on this rule, because their revealed hand held no way to cast it.
+
+### Operational notes that cost a session's time to learn
+
+- **`upload-log` rate limits.** Sustained pulls return 429. Sleep about 3 seconds between logs, back off 7 on a 429, retry up to 5 times. A 429 body has a `detail` key and **no `log` field**, so check `typeof j.log === 'string'` rather than throwing on `undefined.indexOf`.
+- **The browser's JavaScript call caps at about 45 seconds**, which a throttled batch outlives. Park the run on `window` with `.then()` and poll it; make the batch skip already-parsed ids so a retry after a timeout is free.
+- **Strip query strings from anything echoed back.** The extension refuses a result that looks like cookie or query-string data and returns `[BLOCKED: Cookie/query string data]` instead of the value. Reading `performance.getEntriesByType('resource')` trips it. Return `host + pathname`.
+- **Reset per game.** A `gameNumber` change means zeroing the turn counter and dropping the id maps, or game 2's opening hand never gets captured because the snapshot only fires while `turnNumber === 0`.
+
+## 1.12.0 - 2026-09-04
+
+Three defects, all found while reviewing one match, all of which had already put a
+wrong line in a shipped note.
+
+### The work-on line named a strength
+
+- **`play_profile.py` ranks "what to work on" on `punt` and `close` occurrences, never on total occurrences.** The profile listed removal-timing as a strength, 10 correct of 12, and named it as the thing to work on, in the same note. A decision type someone keeps getting right is one they keep making, so it accumulates occurrences faster than the leak and wins a ranking built on volume. Habits flagged as a strength are now ineligible, ties break on total occurrences then `kind`, and the line prints the grade split it ranked on so a reader can argue with it.
+- **When every trend that cleared the bar is a strength, the line says so and names nothing.** Filling the heading with the least-good strength makes the profile unreadable as a measurement. New `problem_occurrences` field on each habit carries the count.
+- Two tests pin both behaviours, and the rule is written out in `reference/play-profile.md` and the SKILL.md decision table.
+
+### Sideboarding was one finding per match, not one per game
+
+- **Games two and three each get their own `sideboarding` finding.** They're boarded off different information, so they're two decisions. One row per match loses the second one, and it loses the more interesting case entirely: a player who cuts a card for game 2 and puts it back for game 3 has already found the mistake. That happened this match with a Spell Snare, and the single row missed it.
+- **Build the in and out lists by diffing the decklists in the log, and check the counts balance.** An in-list shorter than its out-list means a card got missed, which is how "he cut that and never brought it back" gets written about a player who brought it back the next game. That also happened this match.
+- The review template now carries a graded block per post-board game.
+
+### Lands in play is not usable mana
+
+- **New trap 0 in `reference/untapped-sources.md`.** A **stun counter** (`AnnotationType_CounterAdded`, `counter_type: 172`) means the land's next untap step is spent removing the counter, so it sits tapped through a turn it looks entitled to (CR 122.1d). Magmatic Hellkite and the rest of the "basic land tapped with a stun counter" family do this. A turn-11 finding in the Boros Dragons review was written as though six lands meant six mana when the real number was five.
+- The note also covers colourless-only lands against coloured costs, and lands that entered tapped this turn. **The settling check is `ManaPaid` summed against the untap-step `TappedUntappedPermanent` count**, and it runs before any "he could have held X up" line.
+
+### Reading a card is not the same as reading its text
+
+The same turn-11 finding then went wrong a second time, in the other direction, and the
+mana count wasn't the reason. Beza, the Bounding Spring has four conditional clauses and
+they were graded as a block, so the review concluded the player's plan was impossible
+when it was available one play later in the sequence. The player caught it.
+
+- **New section in `SKILL.md` Step 2, four checks in order.** Split a conditional ability into one clause per condition and evaluate each against the state at the moment it's read. Work out *when* it's read: an "if" immediately after the trigger condition is an intervening-if, checked on trigger and again on resolution (CR 603.4); an "if" anywhere else is ordinary English, read once as the ability resolves in written order (CR 608.2c). Ask what the player could still do afterwards, because CR 305.1 allows the land drop any time they have priority in a main phase with the stack empty, and a trigger that counts lands or cards in hand is decided by that order. Then count mana from `ManaPaid`.
+- **`rules-check` is now a required handoff, not an option.** The sibling table says to go get the rule whenever a finding rests on when a condition is evaluated, and the review cites the number it got back. A grade built on a remembered rule is the one error the player has no way to check.
+
 ## 1.11.0 - 2026-09-02
 
 An untapped match URL is two sources, and `vod-review` now knows which one to read.
