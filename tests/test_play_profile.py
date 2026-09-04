@@ -137,11 +137,27 @@ def habit_named(rolled, pattern_id):
     return None
 
 
-def write_ledger(tmp_path, rows, name=pp.LEDGER_NAME):
+def write_ledger(tmp_path, rows, name=pp.LEDGER_NAME, create_notes=True):
+    """Write a ledger, and by default the review notes its rows cite.
+
+    `read_ledger` checks that every `review_note` resolves, so a fixture that
+    writes the ledger alone reports a broken citation on every row. Pass
+    `create_notes=False` to test that check itself.
+    """
     path = tmp_path / name
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n",
                     encoding="utf-8")
+    if create_notes:
+        touch_notes(tmp_path, rows)
     return str(path)
+
+
+def touch_notes(tmp_path, rows):
+    """Create the review notes these rows cite, so the pointer resolves."""
+    for r in rows:
+        ref = r.get("review_note")
+        if ref:
+            (tmp_path / ref).write_text("fixture prose\n", encoding="utf-8")
 
 
 def run(tmp_path, argv, rows=None, ledger=None):
@@ -215,12 +231,14 @@ def test_malformed_json_is_reported_per_line_and_the_rest_still_counts(tmp_path)
     One bad line must not take the ledger down with it, and it must not vanish
     either. Silent drops and silent admissions are the same bug.
     """
+    good = [game("2026-08-30", [finding()]), game("2026-08-31", [finding()])]
     path = tmp_path / pp.LEDGER_NAME
     path.write_text(
-        json.dumps(game("2026-08-30", [finding()])) + "\n"
+        json.dumps(good[0]) + "\n"
         + "{not json\n"
-        + json.dumps(game("2026-08-31", [finding()])) + "\n",
+        + json.dumps(good[1]) + "\n",
         encoding="utf-8")
+    touch_notes(tmp_path, good)
 
     rows, problems, unreadable = pp.read_ledger(str(path), PATTERNS)
     assert unreadable is None
@@ -820,12 +838,12 @@ def test_a_matchup_becomes_worth_reading_at_the_threshold():
 def test_sideboarding_is_recorded_per_matchup():
     row = game("2026-08-30", [], their_deck="Izzet Spellementals")
     row["sideboard"] = {"in": ["Rest in Peace", "Flashfreeze"],
-                        "out": ["Seam Rip"]}
+                        "out": ["Seam Rip", "Pyrrhic Strike"]}
     assert validate(row, 1) == []
     rolled = rollup([row])
     m = rolled["matchups"][0]
     assert {c["card"] for c in m["boarded_in"]} == {"Rest in Peace", "Flashfreeze"}
-    assert m["boarded_out"][0]["card"] == "Seam Rip"
+    assert {c["card"] for c in m["boarded_out"]} == {"Seam Rip", "Pyrrhic Strike"}
     assert "Rest in Peace" in pp.render_deck_profile("Test Deck A", rolled, [])
 
 
@@ -833,6 +851,63 @@ def test_a_malformed_sideboard_is_rejected_rather_than_counted():
     row = game("2026-08-30", [])
     row["sideboard"] = {"in": "Rest in Peace"}
     assert validate(row, 1)
+
+
+def test_an_unbalanced_sideboard_is_reported_in_both_directions():
+    """
+    A deck keeps its size, so in and out are the same length by arithmetic. The
+    reference note asked for this check from 1.12.0 and nothing did it, while
+    the per-matchup test above pinned 2-in against 1-out as clean. A live row
+    then carried 9 in against 7 out on both post-board games of one match.
+    """
+    short_out = game("2026-08-30", [])
+    short_out["sideboard"] = {"in": ["Rest in Peace", "Flashfreeze"],
+                              "out": ["Seam Rip"]}
+    problem = pp._sideboard_balance(short_out, 7)
+    assert problem and "line 7" in problem and "takes out 1" in problem
+
+    short_in = game("2026-08-30", [])
+    short_in["sideboard"] = {"in": ["Rest in Peace"],
+                             "out": ["Seam Rip", "Pyrrhic Strike"]}
+    assert pp._sideboard_balance(short_in, 1), "a short in-list is the same defect"
+
+    balanced = game("2026-08-30", [])
+    balanced["sideboard"] = {"in": ["Rest in Peace"], "out": ["Seam Rip"]}
+    assert pp._sideboard_balance(balanced, 1) is None
+
+    empty = game("2026-08-30", [])
+    empty["sideboard"] = {"in": [], "out": []}
+    assert pp._sideboard_balance(empty, 1) is None, \
+        "a game boarded nothing is not a defect"
+
+    none_at_all = game("2026-08-30", [])
+    assert pp._sideboard_balance(none_at_all, 1) is None
+
+
+def test_an_unbalanced_sideboard_costs_the_lists_and_not_the_findings(tmp_path):
+    """
+    Rejecting the whole row was the first fix and it was wrong. On the live row
+    that found this defect the findings were a post-board mulligan punt and a
+    boarding call, and the mulligan punt is the case the blind/post-board split
+    was written for. A miscounted boarding list is not a reason to lose it.
+    """
+    row = game("2026-08-30", [finding(pattern_id="snap-keeps",
+                                      phase="mulligan-post-board")],
+               game_no=2, their_deck="Izzet Spellementals")
+    row["sideboard"] = {"in": ["Rest in Peace", "Flashfreeze"],
+                        "out": ["Seam Rip"]}
+    ledger = write_ledger(tmp_path, [row])
+    rows, problems, _ = pp.read_ledger(ledger, PATTERNS)
+
+    assert len(rows) == 1, "the row survives"
+    assert rows[0]["findings"], "and so do its findings"
+    assert "sideboard" not in rows[0], "the wrong lists are set aside"
+    assert len(problems) == 1 and "set aside" in problems[0]
+
+    rolled = rollup(rows)
+    assert habit_named(rolled, "snap-keeps"), "the finding still counts"
+    assert not rolled["matchups"] or not rolled["matchups"][0]["boarded_in"], \
+        "the boarding rollup does not carry a list known to be wrong"
 
 
 def test_deck_profiles_are_written_next_to_the_cross_deck_note(tmp_path):
@@ -939,6 +1014,21 @@ def test_the_shipped_registry_is_loadable_and_matches_the_reference_note():
         assert value in text, f"absent from the reference note: {value}"
 
 
+def test_every_kind_carries_at_least_one_pattern():
+    """
+    A kind with no pattern is a category a reviewer can name and cannot file
+    anything under: the pattern_id it needs does not exist, and an invented one
+    is rejected. play-draw, combat-math and rules-error sat empty from 1.14.0,
+    so a combat-math error was either dropped or filed under a pattern that did
+    not describe it.
+    """
+    patterns, error = pp.load_patterns()
+    assert error is None, error
+    used = {spec["kind"] for spec in patterns.values()}
+    empty = [k for k in pp.KINDS if k not in used]
+    assert not empty, f"kinds with no pattern in the registry: {empty}"
+
+
 # -------------------------------------------------------- the closed schema
 
 def test_an_unrecognised_key_is_reported_rather_than_ignored():
@@ -979,6 +1069,7 @@ def test_the_same_game_appended_twice_is_reported(tmp_path):
     path = tmp_path / pp.LEDGER_NAME
     path.write_text(json.dumps(row) + "\n" + json.dumps(row) + "\n",
                     encoding="utf-8")
+    touch_notes(tmp_path, [row])
     rows, problems, _ = pp.read_ledger(str(path), PATTERNS)
     assert len(rows) == 1
     assert problems and "already on line 1" in problems[0]
@@ -1128,6 +1219,42 @@ def test_every_pattern_carries_a_pointer_at_the_review_note():
     h = habit_named(rolled, "spends-removal-early")
     assert h["citations"] and all(c["review_note"] for c in h["citations"])
     assert "Read it in:" in pp.render_deck_profile("Test Deck A", rolled, [])
+
+
+def test_a_citation_that_resolves_to_nothing_is_a_problem(tmp_path):
+    """
+    The pointer used to be checked for being a non-empty string and nothing
+    else. On 2026-09-04 all 41 live rows cited a hyphenated filename while the
+    notes on disk carried an em dash: 46 findings, 0 citations that resolved,
+    and a run that reported no problems. The count still holds, so the row is
+    reported rather than dropped.
+    """
+    rows = [game("2026-08-30", [finding()]), game("2026-08-31", [finding()])]
+    ledger = write_ledger(tmp_path, rows, create_notes=False)
+    parsed, problems, unreadable = pp.read_ledger(ledger, PATTERNS)
+    assert unreadable is None
+    assert len(parsed) == 2, "a broken pointer does not cost the count"
+    assert len(problems) == 2
+    assert "review_note" in problems[0] and "resolves to nothing" in problems[0]
+    assert run(tmp_path, ["--dry-run"], ledger=ledger) == 2
+
+    # And the same rows with their notes on disk come back clean.
+    ok = write_ledger(tmp_path, rows)
+    assert pp.read_ledger(ok, PATTERNS)[1] == []
+
+
+def test_one_note_cited_by_many_rows_is_only_checked_once(tmp_path):
+    """
+    A 29-game cluster cites one note 29 times. The check caches, so a stat call
+    per row is not the cost of reading the ledger.
+    """
+    rows = [game("2026-08-30", [finding()], game_no=n, match_id="cluster")
+            for n in range(1, 6)]
+    for r in rows:
+        r["review_note"] = "[C] VOD Review - one note.md"
+    ledger = write_ledger(tmp_path, rows, create_notes=False)
+    _, problems, _ = pp.read_ledger(ledger, PATTERNS)
+    assert len(problems) == 5, "every row says so, once each"
 
 
 def test_a_deck_sitting_in_its_box_does_not_fade_its_habits():

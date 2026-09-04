@@ -5,7 +5,7 @@ and one rule about where prose is allowed to live.
 
 | Layer | Holds | Read back by the tool |
 |---|---|---|
-| `[C] VOD Review — ...md` | All the prose. Play-by-play, the interview, cards that mattered, the hands card for card | Never. It is the archive, and the thing every profile line cites |
+| `[C] VOD Review - ...md` | All the prose. Play-by-play, the interview, cards that mattered, the hands card for card | Never. It is the archive, and the thing every profile line cites |
 | `play_log.jsonl` | Facts only. Ids, enums, counts, and a pointer at the review note | Every run |
 | `[C] Play Profile.md` + `[C] Play Profile - {deck}.md` | Aggregates. One line per pattern, with its count and its citation | On demand. Generated, never hand-edited |
 
@@ -80,6 +80,12 @@ Three rules, all hard:
 - **Adding a pattern means editing the registry, and nowhere else.** Never
   inline. `test_play_profile.py` fails if the registry and this note drift.
 - **A finding's `kind` has to match its pattern's `kind`.** The script checks.
+- **Every kind carries at least one pattern.** A kind with none is a category a
+  reviewer can name and cannot file anything under, because the pattern_id it
+  would need does not exist and an invented one is rejected. `play-draw`,
+  `combat-math` and `rules-error` sat empty from 1.14.0 until 2026-09-04, so a
+  combat-math error had nowhere to go and either got dropped or landed under a
+  pattern that did not describe it. A test now fails on an empty kind.
 
 `kind` is the coarse category every pattern belongs to, and it is a fixed list:
 
@@ -207,6 +213,15 @@ shortId. For a VOD, `yt:<videoId>`. For a pasted log, anything stable.
 profile line cites, and it is how a count stays checkable without the prose
 being copied.
 
+**The pointer has to resolve, and every run checks it.** Write the filename with
+a plain hyphen, never an em dash: `[C] VOD Review - Boros Dragons 2026-09-04.md`.
+It used to be checked for being a non-empty string and nothing else, and on
+2026-09-04 all 41 rows cited a hyphenated name while the notes on disk carried an
+em dash. 46 findings, 7 citation strings, none of them resolving, and a run that
+reported no problems at all. A citation that lands on nothing is decoration, so
+an unresolvable `review_note` is now a reported problem and the run exits 2. The
+row still counts; it is the pointer that is broken.
+
 ### The fields that carry weight
 
 **`phase`** is `mulligan-blind`, `mulligan-post-board`, `sideboard` or
@@ -323,10 +338,23 @@ and three. It rolls up per opponent archetype in the deck note: which cards you
 bring in against what, how often, and with what record behind it. That's the raw
 material for noticing a card that comes in every time and never does anything.
 
-**Build the lists by diffing the decklists in the log, not from memory**, and
-check the in and out counts balance. An in-list shorter than its out-list means a
-card was missed, and a missed card is how "he cut that and never brought it back"
-gets written about a player who brought it back the very next game.
+**Build the lists by diffing the decklists in the log, not from memory.** The two
+lists are the same length by arithmetic: a deck keeps its size. **Every run
+checks it now**, in both directions, because this rule sat here from 1.12.0
+enforced by nothing and a test actually pinned the opposite, asserting that 2 in
+against 1 out validated clean. A live ledger row then carried 9 in against 7 out
+on both post-board games of one match, which no 60-card deck can do.
+
+**An unbalanced list costs the boarding data for that game and nothing else.**
+The row stays, its findings still count, and only the in/out lists are set aside
+so the matchup rollup never carries a list already known to be wrong. Rejecting
+the whole row was the first attempt at this and it was worse than the defect: on
+the row that found it, the findings were a post-board mulligan punt and a
+boarding call, and that mulligan punt is the case the blind/post-board split was
+written for.
+
+A list that comes up short is how "he cut that and never brought it back" gets
+written about a player who brought it back the very next game.
 
 **A `sideboarding` finding belongs to one post-board game, and both post-board
 games get looked at.** Game 2 and game 3 are boarded off different information,

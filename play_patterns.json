@@ -152,6 +152,24 @@
       "label": "Trades the wrong piece into the counterspell",
       "description": "Baits the counter with the cheap creature when a redundant copy in hand made the expensive one the cheaper trade.",
       "polarity": "leak"
+    },
+    "attacks-into-unfavourable-blocks": {
+      "kind": "combat-math",
+      "label": "Attacks into a board that eats the attacker",
+      "description": "Sends a creature into blockers the defender can trade up against, counting power and toughness without counting the pump, the trick or the second blocker.",
+      "polarity": "leak"
+    },
+    "chooses-the-wrong-side-of-the-die-roll": {
+      "kind": "play-draw",
+      "label": "Keeps the draw when the deck wanted the play",
+      "description": "Takes the extra card with a deck whose plan is a curve, or takes the play with a deck that needed the card, treating the choice as automatic rather than as a matchup read.",
+      "polarity": "leak"
+    },
+    "grades-a-line-on-a-remembered-rule": {
+      "kind": "rules-error",
+      "label": "Acts on a remembered rule instead of looking it up",
+      "description": "Plays or grades a line on a recollection of how an interaction works, where the Comprehensive Rules say otherwise. This is the one error the player has no way to check from inside the game, which is why rules-check is a required handoff.",
+      "polarity": "leak"
     }
   }
 }

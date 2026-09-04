@@ -409,6 +409,9 @@ def validate_row(row, line_no, patterns=None):
                 if not isinstance(cards, list) or not all(
                         isinstance(c, str) and c.strip() for c in cards):
                     bad("sideboard %r is not a list of card names" % side)
+    # The in/out balance is checked in read_ledger rather than here, because a
+    # miscounted boarding list is not a reason to throw the row's findings
+    # away. See _sideboard_balance.
 
     pace = row.get("pace")
     if pace is not None:
@@ -440,6 +443,36 @@ def validate_row(row, line_no, patterns=None):
     return problems
 
 
+def _sideboard_balance(row, line_no):
+    """Check in and out are the same length. Returns a problem or None.
+
+    A deck keeps its size, so the two lists match by arithmetic rather than by
+    convention. The reference note has asked for this check since 1.12.0 and
+    nothing did it, while a test asserted that 2 in against 1 out validated
+    clean. A live row then carried 9 in against 7 out on both post-board games
+    of one match.
+
+    The row is kept and only the boarding lists are set aside. Rejecting the
+    whole row costs its findings, and on the row that found this the findings
+    were the post-board mulligan punt that the blind/post-board split was
+    written for. A wrong boarding count is not a reason to lose that.
+    """
+    board = row.get("sideboard")
+    if not isinstance(board, dict):
+        return None
+    n_in, n_out = board.get("in"), board.get("out")
+    if not isinstance(n_in, list) or not isinstance(n_out, list):
+        return None
+    if len(n_in) == len(n_out):
+        return None
+    row.pop("sideboard")
+    return ("line %d: sideboard brings in %d card(s) and takes out %d. A deck "
+            "keeps its size, so one list is short. The boarding lists are set "
+            "aside for this game and its findings still count: diff the "
+            "decklists in the log again rather than counting from memory."
+            % (line_no, len(n_in), len(n_out)))
+
+
 def read_ledger(path, patterns=None):
     """Parse the ledger. Returns (rows, problems, unreadable).
 
@@ -453,6 +486,14 @@ def read_ledger(path, patterns=None):
     """
     rows, problems, unreadable = [], [], None
     seen = {}
+    # Every profile line ends in a citation at review_note, so the pointer has
+    # to land on a file. It used to be checked for being a non-empty string and
+    # nothing more, and on 2026-09-04 all 41 rows cited a hyphenated filename
+    # while the notes on disk carried an em dash: 46 findings, 0 citations that
+    # resolved, and a run that reported no problems. Cached because a cluster
+    # of 29 games cites one note 29 times.
+    base_dir = os.path.dirname(os.path.abspath(path))
+    note_seen = {}
 
     try:
         with open(path, encoding="utf-8") as fh:
@@ -481,6 +522,25 @@ def read_ledger(path, patterns=None):
                 % (line_no, key[0], key[1], seen[key]))
             continue
         seen[key] = line_no
+
+        balance = _sideboard_balance(row, line_no)
+        if balance:
+            problems.append(balance)
+
+        # Reported, not dropped. The finding still counts; it is the pointer
+        # that is broken, and a row excluded here would hide the count as well
+        # as the citation.
+        note_ref = row.get("review_note")
+        if note_ref:
+            if note_ref not in note_seen:
+                note_seen[note_ref] = os.path.exists(
+                    os.path.join(base_dir, note_ref))
+            if not note_seen[note_ref]:
+                problems.append(
+                    "line %d: review_note %r is not in %s. Every profile line "
+                    "cites this file, so a pointer that resolves to nothing "
+                    "makes the count unarguable." % (line_no, note_ref, base_dir))
+
         rows.append(row)
 
     return rows, problems, unreadable
@@ -1330,8 +1390,18 @@ def render_profile(rollup, problems, today=None):
                             h["occurrences"]))
         lines.append("")
     if watched:
-        lines += ["%d more single-deck pattern(s) sit under the bar at two "
-                  "occurrences. The deck notes count them." % len(watched), ""]
+        # Not all of these are at two occurrences: a pattern with three in one
+        # session is held back by the session bar, not the occurrence bar, and
+        # saying "at two occurrences" states a count that is wrong for it. The
+        # standard this file holds itself to is that every line carries its own
+        # count, so the line reports the range it actually found.
+        counts = sorted(h["occurrences"] for h in watched)
+        if counts[0] == counts[-1]:
+            how_many = "at %d occurrence(s)" % counts[0]
+        else:
+            how_many = "at %d to %d occurrences" % (counts[0], counts[-1])
+        lines += ["%d more single-deck pattern(s) sit under the bar, %s. The "
+                  "deck notes count them." % (len(watched), how_many), ""]
 
     table = _classification_table(rollup, cross_deck_only=True)
     if table:
@@ -1718,11 +1788,20 @@ def main():
         print("  pace     not measurable from any game in the ledger")
 
     if problems:
-        print("  %d ledger line(s) unusable and excluded from every count above:"
-              % len(problems))
+        # Not every problem costs a row its place any more. "Unusable and
+        # excluded from every count above" was true until 1.16.0, when a broken
+        # citation and a miscounted boarding list became reports that keep the
+        # row. Saying they were excluded understates the counts in the other
+        # direction, which is the same class of wrong report this whole file
+        # exists to avoid.
+        print("  %d ledger line(s) reported a problem:" % len(problems))
         for msg in problems:
             print("    %s" % msg)
-        print("  Fix them in the ledger and re-run. Counts understate until then.")
+        print("  A line that failed validation, or repeated a (match_id, game),"
+              " is out of every count above. One reported for a broken pointer"
+              " or a set-aside boarding list is still counted, and its own"
+              " message says so.")
+        print("  Fix them in the ledger and re-run.")
 
     if args.dry_run:
         print("\n--dry-run: nothing written. The profile would be:\n")

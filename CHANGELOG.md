@@ -1,5 +1,88 @@
 # Changelog
 
+## 1.16.0 - 2026-09-04
+
+An ontology audit across the registry, the ledger, the code and the reference
+note. Four conflicts, three of them things the spec asked for and nothing did.
+
+### Every citation in the ledger was a dead pointer
+
+- **The notes on disk carried an em dash and all 41 ledger rows wrote a
+  hyphen.** 46 findings, 7 distinct citation strings, none of them resolving to
+  a file. `--validate` reported no problems, because `review_note` was checked
+  for being a non-empty string and nothing else, and
+  `test_every_pattern_carries_a_pointer_at_the_review_note` asserted the
+  pointer was truthy rather than that it landed anywhere.
+- The reference note taught both spellings: the layer table used an em dash and
+  the ledger example on the same page used a hyphen. Both now use the hyphen,
+  the five notes on disk are renamed, and the schema section says which it is.
+- **An unresolvable `review_note` is now a reported problem and the run exits
+  2.** The row is kept: the finding still counts, it is the pointer that is
+  broken. Cached per filename, because a 29-game cluster cites one note 29
+  times.
+
+### The sideboard balance rule was specified, contradicted by a test, and enforced nowhere
+
+- **In and out are the same length by arithmetic, because a deck keeps its
+  size.** The reference note asked for the check from 1.12.0.
+  `test_sideboarding_is_recorded_per_matchup` asserted that 2 in against 1 out
+  validated clean, which is the check being pinned shut.
+- The live ledger has 9 in against 7 out on both post-board games of the
+  2026-09-01 Izzet Spellementals match, and the two games' lists are
+  byte-identical. Reported now, in both directions.
+- **An unbalanced list costs the boarding data for that game and nothing else.**
+  Rejecting the whole row was the first attempt and it was worse than the
+  defect: on that row the findings are a post-board mulligan punt and a boarding
+  call, and the mulligan punt is the case 1.15.0's blind/post-board split was
+  written for. Losing it to a miscounted list is the wrong trade.
+
+### Three of the ten kinds had no pattern at all
+
+- `play-draw`, `combat-math` and `rules-error` were declared in `KINDS`, in the
+  registry's own preamble and in the reference note, and carried zero patterns
+  from 1.14.0. A reviewer who found a combat-math error had no legal
+  `pattern_id`, and an invented one is rejected, so the finding was either
+  dropped or filed under a pattern that did not describe it.
+- Seeded one each: `attacks-into-unfavourable-blocks`,
+  `chooses-the-wrong-side-of-the-die-roll` and
+  `grades-a-line-on-a-remembered-rule`. **A test now fails on an empty kind**,
+  which is the guard the registry needed rather than three more entries.
+- `rules-error` was the sharp one: 1.12.0 made `rules-check` a required handoff
+  for any finding that rests on when a condition is evaluated, and the finding
+  it produces had nowhere to go.
+
+### Smaller, and one correction to 1.12.0
+
+- **The profile stated a count that was wrong for one of its own rows.** "8 more
+  single-deck pattern(s) sit under the bar at two occurrences" covered a pattern
+  with three occurrences held back by the session bar, not the occurrence bar.
+  The line now reports the range it found. Every line carrying its own count is
+  the standard this file holds itself to.
+- **1.12.0's entry cites a Spell Snare that appears nowhere in the data.** The
+  string occurs once in this repository: in that changelog entry. Not in a
+  ledger row, not in a sideboard list, not in any review note. The argument it
+  was making stands on its own, and the two rows for that match carry identical
+  lists, so nothing there demonstrates a card cut for game 2 and returned for
+  game 3. Recorded here rather than edited there.
+- **The review note now names its own pattern ids.** The citation ran one way
+  only: 0 of 46 findings could be located in their note by identifier, so the
+  join was prose-matching on game and turn, and 12 of the 46 are mulligans and
+  boarding calls with no turn. That is why the 1.15.0 grade audit had to be done
+  by hand.
+- What the audit did **not** find, worth saying because it was checked: every
+  finding's `pattern_id` resolves and its `kind` matches the registry, no phase
+  disagrees with its game number, `(match_id, game)` is unique across all 41
+  rows, no unrecognised keys anywhere, all 22 declared polarities agree with
+  their measured grade mix, all four 1.15.0 grade changes are in the ledger, and
+  the bucketing and work-on ranking reproduce exactly when computed
+  independently of the script.
+- **The run summary was lying by the time the fixes landed.** It printed "N
+  ledger line(s) unusable and excluded from every count above", which was true
+  while an unbalanced sideboard rejected its row and false the moment the row
+  was kept. It now says which class of problem costs a row and which does not.
+  Caught by reading the output of the fix rather than the diff.
+- 3 new tests, 168 passing.
+
 ## 1.15.0 - 2026-09-04
 
 Blind mulligans and informed mulligans are two decisions, the profile opens with

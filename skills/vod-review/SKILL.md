@@ -449,7 +449,7 @@ nothing can contradict has stopped being a measurement.
 
 ## Step 6: Write it up
 
-Save to the insights folder as `[C] VOD Review — {opponent deck or event} {YYYY-MM-DD}.md`.
+Save to the insights folder as `[C] VOD Review - {opponent deck or event} {YYYY-MM-DD}.md`.
 
 ```markdown
 ---
@@ -558,6 +558,15 @@ memory across a dozen review notes is how a habit list turns into a vibe.
 enums, counts and a `review_note` pointer, and the profile cites the note rather than
 quoting it. Copying the account of a decision into the ledger and then into two
 profile notes on top of that is what made the profile 59% quoted play-by-play.
+
+**The citation has to work in both directions, so the note names its pattern ids
+too.** Write the `pattern_id` in backticks in the heading or the first line of each
+graded decision, and write the filename with a plain hyphen: `[C] VOD Review - Boros
+Dragons 2026-09-04.md`. The profile points at the note and the note points back at
+the pattern; without the return leg the only join is prose-matching by game and turn,
+and 12 of the first 46 findings were mulligans and boarding calls that carry no turn
+at all. That is how the 1.15.0 grade audit had to be done by hand, and how a grade
+drifts between the note and the ledger with nothing able to notice.
 
 1. **Append one line per game to `play_log.jsonl`** in the insights folder. One object
    per game, not per match. The full schema is in `reference/play-profile.md`.
