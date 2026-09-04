@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.16.1 - 2026-09-04
+
+Retracting a correction. 1.16.0 said 1.12.0's Spell Snare "appears nowhere in the
+data". It appears in the data, and 1.12.0 was right.
+
+### The Spell Snare is real and the record was fine
+
+- **Boros Dragons, match `oB3ewWs8nWz2d24xDXS6Wp`.** Spell Snare goes out in
+  game 2 and comes back in for game 3, where it countered Voice of Victory on
+  turn 4. Both rows balance, the two games' lists differ, and the game 2 row
+  carries a `cuts-the-narrow-answer-needed` finding whose note says exactly
+  this. It is also in the game 3 kept hand. Four other files mention it,
+  including that match's review note and the UW Control profile.
+- **1.12.0's account was accurate in every particular.** The 1.16.0 entry
+  claiming otherwise is withdrawn.
+
+### Why the audit got it wrong, which is the part worth keeping
+
+- **`Grep` respects `.gitignore`, and this repository's `.gitignore` hides all of
+  the data.** `play_log*.jsonl`, the root `[C] *.md` notes, the archetype notes,
+  every melee and MTGO CSV and JSON, `transcripts/` and `archive/` are invisible
+  to a default ripgrep search. A repo-wide search for "Spell Snare" returned one
+  hit, in `CHANGELOG.md`, and reported it as the only occurrence in the
+  repository. There are 37 occurrences across 6 files.
+- The rest of the 1.16.0 audit read the ledger with `json.loads` and stands. The
+  one claim routed through a text search is the one that was wrong, and it was
+  the one asserting an absence.
+- **An absence found by a tool that filters its own input is not an absence.**
+  This is guardrail 2 from `[C] Script Guardrails.md` arriving through the search
+  tool rather than through a script: an unreadable file and an empty file looked
+  the same, and the run reported clean. Searching this repo's data means reading
+  the file, or passing the switch that turns the filter off.
+
 ## 1.16.0 - 2026-09-04
 
 An ontology audit across the registry, the ledger, the code and the reference
@@ -58,12 +91,10 @@ note. Four conflicts, three of them things the spec asked for and nothing did.
   with three occurrences held back by the session bar, not the occurrence bar.
   The line now reports the range it found. Every line carrying its own count is
   the standard this file holds itself to.
-- **1.12.0's entry cites a Spell Snare that appears nowhere in the data.** The
-  string occurs once in this repository: in that changelog entry. Not in a
-  ledger row, not in a sideboard list, not in any review note. The argument it
-  was making stands on its own, and the two rows for that match carry identical
-  lists, so nothing there demonstrates a card cut for game 2 and returned for
-  game 3. Recorded here rather than edited there.
+- ~~**1.12.0's entry cites a Spell Snare that appears nowhere in the data.**~~
+  **Wrong, retracted in 1.16.1.** It is in the data, in the Boros Dragons match
+  rather than the Izzet Spellementals one this entry assumed. The search that
+  produced the claim was filtered by `.gitignore` and never read the ledger.
 - **The review note now names its own pattern ids.** The citation ran one way
   only: 0 of 46 findings could be located in their note by identifier, so the
   join was prose-matching on game and turn, and 12 of the 46 are mulligans and
