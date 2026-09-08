@@ -20,6 +20,39 @@ import sys
 
 import pytest
 
+
+def test_local_scrape_backups_never_ship():
+    """
+    2026-09-08: package.py builds the bundle from the working directory, not
+    from git, so a file .gitignore keeps out of the repo still ships. Four
+    backups of local MTGO and melee scrapes were going into the public
+    bundle, 2.7 MB of one person's data.
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import package
+
+    for name in ("melee_deck_cache.json.bak", "mtgo_classifications.json.bak",
+                 "mtgo_challenge_latest.json.bak", "mtgo_5-0_latest.json.bak",
+                 "play_log.pre-format.jsonl", "archetype_refs.pre-alias.json",
+                 "melee_standard_all_pairings.raw.csv",
+                 "melee_standard_all_pairings.pre-rebuild.csv",
+                 "melee_standard_442752_pairings.quarantined.csv",
+                 "[C] Play Profile.pre-rollup.md"):
+        assert not package.should_ship(Path(name)), f"{name} must not ship"
+
+
+def test_the_modules_every_consumer_imports_do_ship():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    import package
+
+    for name in ("combine_events.py", "deck_labels.py", "card_signal.py",
+                 "build_card_pool.py", "play_profile.py"):
+        assert package.should_ship(Path(name)), f"{name} must ship"
+
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, SCRIPT_DIR)
 
@@ -105,6 +138,18 @@ def test_changelog_documents_the_shipped_version():
     assert re.search(rf"^##\s+{re.escape(version)}\b", text, re.M), \
         f"CHANGELOG.md has no section for the shipped version {version}"
 
+    # The manifest must name the NEWEST section, not just any section. Asking
+    # only "does a section exist" passed all the way from 1.16.1 to 1.20.0
+    # while four releases were written up and the manifest never moved, so an
+    # install reported 1.16.1 and /plugin update saw nothing new. Caught
+    # 2026-09-08, by which point 1.17.0, 1.18.0, 1.18.1, 1.19.0 and 1.20.0 were
+    # all in the changelog above a manifest that still said 1.16.1.
+    newest = re.search(r"^##\s+(\S+)", text, re.M)
+    assert newest, "CHANGELOG.md has no version sections at all"
+    assert newest.group(1) == version, (
+        f"plugin.json says {version} but the newest CHANGELOG section is "
+        f"{newest.group(1)}; bump the manifest when you write a release")
+
 
 # ------------------------------------------------------------------- skills
 
@@ -184,6 +229,9 @@ def test_package_ships_the_manifest_skills_and_the_name_manifest():
         "skills/deck-check/SKILL.md",
         "skills/mtg-tournament-analysis/reference/archetypes/README.md",
         "archetype_names.json",
+        # deck-check names this as lookup 1. fetch_vocabulary.py shipped
+        # without it up to 2026-09-08: the refresher present, the seed gone.
+        "archetype_vocabulary.json",
         "mtg_stats.py",
         "play_profile.py",
         "set_releases.json",

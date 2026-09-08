@@ -1,0 +1,541 @@
+{
+  "source": "mtggoldfish",
+  "format": "Standard",
+  "fetched": "2026-09-07",
+  "window_days": 30,
+  "url": "https://www.mtggoldfish.com/metagame/standard/full",
+  "note": "Seeded from page 1 of the 30-day table. Refresh with fetch_vocabulary.py. Page 2 is the one-deck long tail and is not seeded here.",
+  "archetypes": {
+    "Mono-Green Landfall": {
+      "meta_pct": 17.7,
+      "decks": 227,
+      "defining": [
+        "Icetill Explorer",
+        "Earthbender Ascension",
+        "Mightform Harmonizer"
+      ]
+    },
+    "Izzet Spellementals": {
+      "meta_pct": 11.5,
+      "decks": 148,
+      "defining": [
+        "Sunderflock",
+        "Eddymurk Crab",
+        "Hearth Elemental"
+      ]
+    },
+    "Dimir Midrange": {
+      "meta_pct": 10.4,
+      "decks": 134,
+      "defining": [
+        "Kaito, Bane of Nightmares",
+        "Enduring Curiosity",
+        "Requiting Hex"
+      ]
+    },
+    "4c Control": {
+      "meta_pct": 7.1,
+      "decks": 91,
+      "defining": [
+        "Inevitable Defeat",
+        "Jeskai Revelation",
+        "Tablet of Discovery"
+      ]
+    },
+    "Dimir Excruciator": {
+      "meta_pct": 5.9,
+      "decks": 76,
+      "defining": [
+        "Deceit",
+        "Superior Spider-Man",
+        "Bitter Triumph"
+      ]
+    },
+    "Lifegain": {
+      "meta_pct": 5.0,
+      "decks": 64,
+      "defining": [
+        "Amalia Benavides Aguirre",
+        "Case of the Uneaten Feast",
+        "Hinterland Sanctifier"
+      ]
+    },
+    "Mardu Discard": {
+      "meta_pct": 4.6,
+      "decks": 59,
+      "defining": [
+        "Moonshadow",
+        "Bloodghast",
+        "Marauding Mako"
+      ]
+    },
+    "Boros Dwarves": {
+      "meta_pct": 3.7,
+      "decks": 48,
+      "defining": [
+        "Thorin, Mountain-king",
+        "Leyline Axe",
+        "Lavaspur Boots"
+      ]
+    },
+    "Selesnya Landfall": {
+      "meta_pct": 3.5,
+      "decks": 45,
+      "defining": [
+        "Mightform Harmonizer",
+        "Icetill Explorer",
+        "Erode"
+      ]
+    },
+    "Azorius Momo": {
+      "meta_pct": 2.5,
+      "decks": 32,
+      "defining": [
+        "Quantum Riddler",
+        "Practiced Offense",
+        "Sage of the Skies"
+      ]
+    },
+    "Azorius Tempo": {
+      "meta_pct": 2.4,
+      "decks": 31,
+      "defining": [
+        "High Noon",
+        "Aven Interrupter",
+        "Skycoach Conductor"
+      ]
+    },
+    "Boros Tokens": {
+      "meta_pct": 1.9,
+      "decks": 24,
+      "defining": [
+        "Voice of Victory",
+        "Belladonna Took",
+        "Warleader's Call"
+      ]
+    },
+    "Golgari Midrange": {
+      "meta_pct": 1.9,
+      "decks": 24,
+      "defining": [
+        "Deceit",
+        "Firdoch Core",
+        "Together as One"
+      ]
+    },
+    "Jeskai Control": {
+      "meta_pct": 1.7,
+      "decks": 22,
+      "defining": [
+        "Tablet of Discovery",
+        "Stock Up",
+        "Sear"
+      ]
+    },
+    "Mono-Black Aggro": {
+      "meta_pct": 1.6,
+      "decks": 21,
+      "defining": [
+        "Forsaken Miner",
+        "Iridescent Vinelasher",
+        "Shoot the Sheriff"
+      ]
+    },
+    "Mono-Red Aggro": {
+      "meta_pct": 1.5,
+      "decks": 19,
+      "defining": [
+        "Hexing Squelcher",
+        "Howlsquad Heavy",
+        "Burnout Bashtronaut"
+      ]
+    },
+    "Boros Dragons": {
+      "meta_pct": 1.4,
+      "decks": 18,
+      "defining": [
+        "Voice of Victory",
+        "Magmatic Hellkite",
+        "Nova Hellkite"
+      ]
+    },
+    "Bant Airbending Combo": {
+      "meta_pct": 1.4,
+      "decks": 18,
+      "defining": [
+        "Appa, Steadfast Guardian",
+        "Aang, Swift Savior",
+        "Great Divide Guide"
+      ]
+    },
+    "Jeskai Artifacts": {
+      "meta_pct": 1.3,
+      "decks": 17,
+      "defining": [
+        "The Mind Stone",
+        "Simulacrum Synthesizer",
+        "Perilous Snare"
+      ]
+    },
+    "Izzet Aggro": {
+      "meta_pct": 1.2,
+      "decks": 15,
+      "defining": [
+        "Hexing Squelcher",
+        "Hired Claw",
+        "Colorstorm Stallion"
+      ]
+    },
+    "Izzet Leyline Aggro": {
+      "meta_pct": 1.0,
+      "decks": 13,
+      "defining": [
+        "Slickshot Show-Off",
+        "Leyline of Resonance",
+        "Stadium Headliner"
+      ]
+    },
+    "Izzet Prowess": {
+      "meta_pct": 1.0,
+      "decks": 13,
+      "defining": [
+        "Astrologian's Planisphere",
+        "Slickshot Show-Off",
+        "Pym Particles"
+      ]
+    },
+    "Azorius Control": {
+      "meta_pct": 0.9,
+      "decks": 11,
+      "defining": [
+        "Erode",
+        "Three Steps Ahead",
+        "Bender's Waterskin"
+      ]
+    },
+    "Sultai Reanimator": {
+      "meta_pct": 0.9,
+      "decks": 11,
+      "defining": [
+        "Overlord of the Balemurk",
+        "Formidable Speaker",
+        "Superior Spider-Man"
+      ]
+    },
+    "5c Legends": {
+      "meta_pct": 0.5,
+      "decks": 7,
+      "defining": [
+        "Cecil, Dark Knight",
+        "Aang, Swift Savior",
+        "The Wondrous Wasp"
+      ]
+    },
+    "Sultai Excruciator": {
+      "meta_pct": 0.5,
+      "decks": 6,
+      "defining": [
+        "Superior Spider-Man",
+        "Deceit",
+        "Stock Up"
+      ]
+    },
+    "Selesnya Aggro": {
+      "meta_pct": 0.5,
+      "decks": 6,
+      "defining": [
+        "Ouroboroid",
+        "Practiced Offense",
+        "Pawpatch Recruit"
+      ]
+    },
+    "Temur Kona": {
+      "meta_pct": 0.4,
+      "decks": 5,
+      "defining": [
+        "Formidable Speaker",
+        "Omniscience",
+        "Kona, Rescue Beastie"
+      ]
+    },
+    "4c Kona": {
+      "meta_pct": 0.4,
+      "decks": 5,
+      "defining": [
+        "Formidable Speaker",
+        "Omniscience",
+        "Consult the Star Charts"
+      ]
+    },
+    "Gruul Landfall": {
+      "meta_pct": 0.4,
+      "decks": 5,
+      "defining": [
+        "Mossborn Hydra",
+        "Tifa Lockhart",
+        "Earthbender Ascension"
+      ]
+    },
+    "Jeskai Momo": {
+      "meta_pct": 0.4,
+      "decks": 5,
+      "defining": [
+        "Quantum Riddler",
+        "Sage of the Skies",
+        "Momo, Friendly Flier"
+      ]
+    },
+    "Dimir Control": {
+      "meta_pct": 0.3,
+      "decks": 4,
+      "defining": [
+        "Three Steps Ahead",
+        "Stock Up",
+        "Consult the Star Charts"
+      ]
+    },
+    "Izzet Control": {
+      "meta_pct": 0.3,
+      "decks": 4,
+      "defining": [
+        "Tablet of Discovery",
+        "Colorstorm Stallion",
+        "Stock Up"
+      ]
+    },
+    "Dimir Self-Bounce": {
+      "meta_pct": 0.3,
+      "decks": 4,
+      "defining": [
+        "Boomerang Basics",
+        "Kaito, Bane of Nightmares",
+        "Loki, God of Mischief"
+      ]
+    },
+    "Temur Leyline Aggro": {
+      "meta_pct": 0.3,
+      "decks": 4,
+      "defining": [
+        "Slickshot Show-Off",
+        "Leyline of Resonance",
+        "Stadium Headliner"
+      ]
+    },
+    "Mono-Red Leyline Aggro": {
+      "meta_pct": 0.2,
+      "decks": 3,
+      "defining": [
+        "Slickshot Show-Off",
+        "Leyline of Resonance",
+        "Dreadmaw's Ire"
+      ]
+    },
+    "Gruul Leyline Aggro": {
+      "meta_pct": 0.2,
+      "decks": 3,
+      "defining": [
+        "Leyline of Resonance",
+        "Slickshot Show-Off",
+        "Emberheart Challenger"
+      ]
+    },
+    "Naya Delirium": {
+      "meta_pct": 0.2,
+      "decks": 3,
+      "defining": [
+        "Fear of Missing Out",
+        "Keen-Eyed Curator",
+        "Practiced Offense"
+      ]
+    },
+    "5c Elementals": {
+      "meta_pct": 0.2,
+      "decks": 3,
+      "defining": [
+        "Wistfulness",
+        "Vibrance",
+        "Ashling, Rekindled"
+      ]
+    },
+    "Gruul Delirium": {
+      "meta_pct": 0.2,
+      "decks": 3,
+      "defining": [
+        "Fear of Missing Out",
+        "Keen-Eyed Curator",
+        "Violent Urge"
+      ]
+    },
+    "4c Legends": {
+      "meta_pct": 0.2,
+      "decks": 2,
+      "defining": [
+        "Aang, Swift Savior",
+        "The Wondrous Wasp",
+        "Cecil, Dark Knight"
+      ]
+    },
+    "Izzet Spells": {
+      "meta_pct": 0.2,
+      "decks": 2,
+      "defining": [
+        "Tablet of Discovery",
+        "Stock Up",
+        "Colorstorm Stallion"
+      ]
+    },
+    "Mardu Manufacturing": {
+      "meta_pct": 0.2,
+      "decks": 2,
+      "defining": [
+        "Legion Extruder",
+        "Weapons Manufacturing",
+        "Aang's Iceberg"
+      ]
+    },
+    "Orzhov Aggro": {
+      "meta_pct": 0.2,
+      "decks": 2,
+      "defining": [
+        "Forsaken Miner",
+        "Sheltered by Ghosts",
+        "Strategic Betrayal"
+      ]
+    },
+    "Sultai Control": {
+      "meta_pct": 0.2,
+      "decks": 2,
+      "defining": [
+        "Three Steps Ahead",
+        "Consult the Star Charts",
+        "Deadly Cover-Up"
+      ]
+    },
+    "4c Omniscience": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Formidable Speaker",
+        "Omniscience",
+        "Stock Up"
+      ]
+    },
+    "Temur Spellementals": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Flow State",
+        "Eddymurk Crab",
+        "Prismari Charm"
+      ]
+    },
+    "Dimir Faeries": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Bitterbloom Bearer",
+        "Sleep-Cursed Faerie",
+        "Flitterwing Nuisance"
+      ]
+    },
+    "Mono-Black Midrange": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Bloodthirsty Conqueror",
+        "Unstoppable Slasher",
+        "Bloodletter of Aclazotz"
+      ]
+    },
+    "Orzhov Midrange": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Sheltered by Ghosts",
+        "Archenemy's Charm",
+        "Cosmogrand Zenith"
+      ]
+    },
+    "Boros Mice": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Emberheart Challenger",
+        "Practiced Offense",
+        "Manifold Mouse"
+      ]
+    },
+    "4c Reanimator": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Formidable Speaker",
+        "Superior Spider-Man",
+        "Bringer of the Last Gift"
+      ]
+    },
+    "Rakdos Midrange": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Rot-Curse Rakshasa",
+        "Alesha, Who Laughs at Fate",
+        "The Infamous Cruelclaw"
+      ]
+    },
+    "Temur Stormsplitter": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Enduring Vitality",
+        "Stormsplitter",
+        "Stock Up"
+      ]
+    },
+    "Mono-Red Dragons": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Avengers Disassembled",
+        "Magmatic Hellkite",
+        "Nova Hellkite"
+      ]
+    },
+    "Mono-White Momo": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Cosmogrand Zenith",
+        "Haliya, Guided by Light",
+        "Sage of the Skies"
+      ]
+    },
+    "5c Control": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Consult the Star Charts",
+        "Shared Roots",
+        "Firdoch Core"
+      ]
+    },
+    "Rakdos Discard": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Moonshadow",
+        "Marauding Mako",
+        "Bloodghast"
+      ]
+    },
+    "Bant Aggro": {
+      "meta_pct": 0.1,
+      "decks": 1,
+      "defining": [
+        "Seam Rip",
+        "Dyadrine, Synthesis Amalgam",
+        "Llanowar Elves"
+      ]
+    }
+  }
+}

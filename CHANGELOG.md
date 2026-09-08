@@ -1,5 +1,427 @@
 # Changelog
 
+## 1.20.0 - 2026-09-08
+
+Four fixes from a pre-ship review. The pool stopped shrinking, the matchup layer
+learned the classifier's vocabulary, the card layer learned the sideboard, and
+the play ledger learned which format it was in.
+
+### Two pre-flight catches on the way to the commit
+
+**The manifest never left 1.16.1.** 1.17.0, 1.18.0, 1.18.1, 1.19.0 and 1.20.0
+were all written up in this file while `.claude-plugin/plugin.json` still said
+`1.16.1`. An install would report 1.16.1 and `/plugin update` would see nothing
+new. `test_changelog_documents_the_shipped_version` asked only whether a section
+for the manifest's version exists, and 1.16.1's section does, so it passed
+through all four releases. It now asserts the manifest matches the **newest**
+section.
+
+**`archetype_vocabulary.json` did not ship.** `deck-check/SKILL.md` names it as
+lookup 1 for archetype suggestions, and `fetch_vocabulary.py` — the script that
+refreshes it — was in the bundle without it. Everything `.json` is excluded by
+default, and this one was never added to `KEEP_JSON`. Worst shape for a missing
+file: the skill still runs, falls through to lookup 2 on every deck, and says
+nothing. Now in `KEEP_JSON`, in `REQUIRED` so the build fails without it, and in
+the must-ship test list.
+
+### The combined CSVs only ever shrank
+
+Three scripts wrote `melee_<fmt>_all_*.csv`, each with a different definition of
+the pool: `melee_scraper` rebuilt it from the per-event glob with no verdict
+filter, `winrate_analysis` rebuilt it again with no dedupe either, and
+`validate_events.rewrite_combined` read the file, filtered it, and wrote it back
+over itself.
+
+That last one was the damaging half. Every run filtered an already-filtered
+file, so rows could leave and never come back. **The standings file went 553
+rows in August to 312 to 241 while 27 per-event files sat on disk**, and
+`build_baseline.py` reads only that file, so the meta share table and the 1.19.0
+honest-delta machinery were computed on 20 of 27 events. The `.raw.csv` safety
+net sat behind `if not os.path.isfile(raw)` and had been frozen for 11 days.
+
+New `combine_events.py` is the only writer. The combined CSVs are derived:
+rebuilt from the per-event files every time, verdicts and the seat filter
+applied at rebuild time, never edited in place. On the live pool the rebuild
+recovers **1,519 pairing rows against the 501 on disk, and 502 standings against
+241**.
+
+It fails closed. When a per-event file can't be read it refuses to write and
+leaves the existing pool alone, because a loud warning above a shorter file
+still leaves the shorter file. That is the OneDrive case: 8 cloud-only
+placeholders in the live folder would otherwise have trimmed 5 real events out
+of the pool. `--allow-partial` accepts the smaller pool on purpose.
+
+`melee_<fmt>_all_coverage.json` lands beside the CSVs saying which events made
+it in, which were quarantined, which carry no verdict, and which files could not
+be read. A CSV can't carry a note about what's missing from it.
+
+An unchanged rebuild does not touch the file, so `build_baseline`'s "the
+standings file has been rescraped since the last validation" guard still means
+something.
+
+### The matchup layer now speaks the classifier's vocabulary
+
+1.19.0 moved meta share onto `deck_labels.py` and left the matchup layer reading
+deck names off the CSV row, so `matchup_matrix`, `winrate_analysis` and
+`update_archetypes` got aliases but never a classifier verdict. The CHANGELOG
+has carried "moving them onto deck_labels is open" since.
+
+`deck_labels.resolve_pairing_decks` closes it. On the full rebuilt pool:
+
+    distinct deck labels        122  ->  104
+    seats relabelled                     387
+    populated matchup cells     604  ->  493
+    cells at the 10-match floor   8  ->   14
+
+The gain is merging. Fewer, denser cells is the point: a deck filed under three
+house styles is three thin cells that each miss the floor and one real one that
+clears it.
+
+**A correction to the review that prompted this.** It claimed the 83% of pairing
+rows with a blank deck name carried a `deck_url` the cache could resolve. They
+don't. Of the 783 unnamed seats, **8 have a URL**; the other 775 have neither a
+name nor a link, so nothing in `deck_labels` can reach them. That is a
+`melee_scraper.py` gap and it is still open.
+
+All three consumers also read the pool through `combine_events.load_pool` now,
+which applies the seat filter they used to glob straight past. A Standard player
+paired against a Modern player inside a team event was counting as a Standard
+match.
+
+### `card_signal.py` reads the sideboard
+
+Every lens read `mainboard` and nothing else, so a card that lived in the 15 was
+invisible to the whole card layer. Sideboards were captured on all 835 MTGO
+decks in the pool the entire time.
+
+Phill's 2026-09-07 ruling stands: the sideboard is registered and reported and
+never gated on. Classification still scores mainboards only. This is the
+reporting half, which was measured, agreed, and then never built.
+
+New `adoption` lens: share of maindecks, sideboards or 75s carrying a card, by
+ISO week, with the card's colour and type beside it. `trend` splits the window
+in half, which flattens the shape this is looking for, because a field answers a
+deck from its sideboard first and its maindeck weeks later.
+
+On the live pool, 4 weeks, n = 286/260/132/149:
+
+    spell snare          8.4% -> 18.1% of sideboards
+    torpor orb          11.2% -> 22.8%, peaking at 37.1% in week 3
+    negate              22.7% ->  8.1%
+    soul-guide lantern  29.4% -> 14.8%
+
+`--archetype` switches to average copies in that deck's 75. Dimir Midrange went
+1.5 to 2.3 Flashfreeze over the same 4 weeks, which is 30 pilots independently
+deciding the same thing about red and green.
+
+Weeks under 12 decks are dropped and named. Dateless decks are dropped and
+counted, which is why the melee cache is still not read here: its entries carry
+no event date and no finish, so they can join neither a weekly bucket nor
+anything that ranks by placing. Open problem 1 is the fix and this lens gets 393
+more decks the day it lands.
+
+### `card_pool_<fmt>.json` carries colour, mana value and type
+
+The pool held 5,365 names and nothing else, so the tool could count a card and
+say nothing about what kind of card it was. "More two-drops", "board wipes are
+showing up" and "Flashfreeze is up because red and green overperformed" are
+mana-value, type and colour questions, and none of them could be asked.
+
+`build_card_pool.py` now keeps `cmc`, `colors`, `color_identity` and `type_line`
+from the same Scryfall crawl it already ran. `cards` stays a flat list of names
+because `validate_events.py` reads it that way, per Phill's 2026-09-07
+constraint. A pool cached before today has no attributes and the lens says so
+rather than printing blanks.
+
+Scryfall pages now retry with backoff on a 429 or a 5xx. The refresh hit one
+mid-crawl; without the retry the crawl dies partway and a scheduled run stops
+refreshing the pool silently.
+
+### The play ledger has a `format`
+
+`play_log.jsonl` had no format field and `play_profile.resolve_dir` sorts the
+insights notes by format, so **29 Historic games (Golgari Yawgmoth) and 12
+Standard games (UW Control) were rolling up into one Standard profile**. The
+`era` field recorded the difference and nothing partitioned on it, so "Golgari
+Yawgmoth vs Goblin Charbelcher, 4 games" sat in the folder a Standard question
+reads.
+
+The rule now: a deck, a matchup record and a kept hand belong to one format; a
+habit does not. Decks and matchups count this format's games, habits count every
+game in the ledger, and the run says which sample each came from.
+
+`migrate_play_log_format.py` stamps the field from the era slug, with a
+`--dry-run` and a `.pre-format.jsonl` backup. It leaves an unparseable line byte
+for byte rather than rewriting a line it could not read.
+
+A deck note this run didn't write is now named rather than left to look current.
+
+### Known limits
+
+- 775 pairing seats have no deck name and no deck URL. Only a scraper change
+  reaches them.
+- The melee cache still has no event date, so `card_signal` is MTGO-only.
+- A weekend deck recommendation still has no deck pool to choose from and no
+  join from the play profile to the field. Held deliberately: the matchup data
+  it would rank on is 14 cells.
+
+## 1.19.0 - 2026-09-07
+
+Meta share now speaks the classifier's vocabulary. It never did before.
+
+### `build_baseline.py` was counting organizer free text
+
+The classifier resolves a deck by its cards. `mtg_stats.ARCHETYPE_ALIASES` folds
+house styles onto one name. `archetype_overrides.json` records Phill's rulings.
+`build_baseline.py` used none of the three. It counted whatever a player typed
+into melee at 9am, so one deck appeared under three names and the share table
+disagreed with every other number in the project.
+
+The 2026-09-07 snapshot carried **44 labels for 78 players, 27 of them
+singletons**. Applying the alias table alone moved Izzet Spellementals from 6.4%
+and fifth place to 10.3% and first. The tier order in the published note was
+wrong, for a reason already solved thirty lines away in another file.
+
+### New `deck_labels.py`: one name per result, with its provenance
+
+    override    a human ruling in archetype_overrides.json. Always wins.
+    classifier  a confident verdict from the cached decklist's cards.
+    organizer   the list is cached but no reference is confident. Aliased text.
+    dropped     no cached decklist. The row leaves the sample.
+
+Dropping is Phill's call, 2026-09-07: *"If we have no decklist for a melee
+result, that position should be discarded. Knowing someone went 2-6 or 7-1 means
+nothing if we do not know what they played."* On the live pool that's 80 results
+down to 59, and it takes 44 labels to 35 and singletons from 27 to 22. Bare
+`Dimir`, `Azorius Tempo`, `Izzet Elementals` and `Mono-Green Landfall` stop
+appearing as decks of their own.
+
+`source` travels with every label and lands in the snapshot as `by_source`,
+because an `organizer` row is a name somebody typed and a `classifier` row is a
+name the cards support. 27 of the 59 kept rows are still organizer text, which
+is a fair reading of how thin the current melee cache is.
+
+Drops are counted and printed. A filter that doesn't say what it removed can't
+be checked.
+
+### A share delta now refuses when it would be dishonest
+
+Snapshot 2026-08-31 covered 23 events and 369 players. 2026-09-03 covered 17 and
+61. 2026-09-07 covered 20 and 78. Subtracting those measured which CSVs were in
+the folder that morning.
+
+Each snapshot now records `event_ids` and the players it actually counted.
+`deck_labels.delta_is_honest` refuses a comparison when either snapshot is under
+40 players, or when the two event pools share less than half their events, and
+the weekly note prints the reason where the numbers would have gone.
+
+`events_covered` also changed meaning: it's now events that contributed a
+counted player, with `events_in_pool` alongside it. An event whose decklists are
+all uncached shouldn't inflate the coverage a snapshot claims.
+
+### Known limits
+
+- `matchup_matrix.py` and `winrate_analysis.py` still read deck names off the
+  CSV row through `mtg_stats.classify_row`. They get aliases, not classifier
+  labels. Moving them onto `deck_labels` is open.
+- The fix makes the sample honest, not bigger. 59 players across 11 events is
+  not a tier list. A fresh melee scrape is still the thing that moves this.
+- `archetype_refs.json`'s `_thresholds` block still describes the 45-of-60 slot
+  model that 1.18.0 retired. Nothing reads it, and it still lies.
+
+## 1.18.1 - 2026-09-07
+
+Naming now comes from the format's published vocabulary, and a wrong call about
+Izzet Prowess is corrected.
+
+### Izzet Prowess was not banned out
+
+1.18.0's notes and the 4CC archetype files said the Prowess matchup was moot
+because the deck had been banned. **Stormchaser's Talent was banned; the deck was
+not.** It rebuilt around Astrologian's Planisphere and sits at 1.0% of Standard
+on 13 decks in MTGGoldfish's 30-day table. The local post-ban pool holds 20 decks
+with its tells, none running a banned card, still appearing in September.
+
+A ban deletes a card. Whether the deck dies or rebuilds is a question for the
+data, not an inference from the announcement. Corrected in
+`[C] Four-Color Control (Jeskai Base).md` and the consolidation note.
+
+### `fetch_vocabulary.py` — archetype names from MTGGoldfish
+
+MTGGoldfish publishes the whole vocabulary: archetype name, meta share, deck
+count, and the three cards that define each one. That's a better naming
+authority than the local melee cache, which inherits every typo and bare
+colour-pair label a player typed at 9am, and can only ever suggest a name
+somebody in your own scrape already used.
+
+`cluster_shells.py` now names against it first and falls back to the cache. On
+the live queue that took shells with a usable name suggestion from 12 of 27 to
+24 of 27, and the names line up with what the rest of the format calls these
+decks — Boros Dwarves, Jeskai Artifacts, Sultai Reanimator, Mardu Manufacturing.
+
+**One defining card is not a match.** Deceit defines both Dimir Excruciator and
+Golgari Midrange; Stock Up defines four control decks. Ranking a 1-of-3 hit by
+meta share proposed "Azorius Control" for an Izzet deck that shared one card.
+Two of three is now the bar for prefilling a name; single hits are still shown,
+flagged weak, because they're a useful starting point even when wrong.
+
+`archetype_vocabulary.json` ships seeded from the 2026-09-07 table so naming
+works before the first fetch. Refresh it after any set release or ban — that
+table is also the cheapest check on whether a deck actually died.
+
+## 1.18.0 - 2026-09-07
+
+Classification rewritten. The queue was growing because the pipeline could not
+do two things it needed to do: score references of different sizes against each
+other, and create a category that didn't already exist.
+
+Measured before: **537 of 795 MTGO decks classified (68%)**, 263 queued, three
+dated queue notes on disk totalling 770 KB and 1,848 entries, none of which
+could ever be finished.
+
+### Two bugs in the scoring
+
+- **The threshold was in the wrong unit.** Confident meant "45 of 60 raw slots",
+  but references are built from whatever decks are cached and ranged from 15 to
+  63 total slots. A reference summing to 36 could never score 45, so every deck
+  of that archetype queued forever however perfect the match. Eight of twenty-one
+  references were in that state, including Mono Green Landfall — the most-played
+  deck in the format.
+- **Selection had no margin.** Izzet, Izzet Elementals and Izzet Spellementals
+  shared 94% of their slots and scored within 1-3 of each other on the same
+  decks, so the winner was dictionary order. `audit_refs.py` had been reporting
+  this as an ERROR for weeks.
+
+### New `classifier.py`, and it's the only scoring model now
+
+`classify_decks.py` and `build_refs_from_melee.py` each carried their own copy of
+`match_score` / `best_match` and had already drifted — one selected on raw slots,
+the other on ratio, so the same deck could be Izzet Spellementals in one script
+and Izzet Elementals in the other. Both now import `classifier`.
+
+Three numbers instead of one: `coverage` (matched / reference size),
+`containment` (matched / deck size), and a `margin` of coverage over the
+runner-up. Coverage is comparable across references of different sizes, which is
+the fix for the first bug; the margin is the fix for the second. Defaults 0.65 /
+0.35 / 0.05, tuned on the 795-deck corpus: they agree with 446 of 481 existing
+labels, and all 35 disagreements are refinements rather than errors.
+
+Every verdict carries a **reason**, because a queue entry that doesn't say why
+it's there can't be acted on. The reasons map to different fixes, and the queue
+now leads with the split rather than the total.
+
+### Card rules, so a distinction gets settled once
+
+- **`requires`** — a deck playing none of these can't be this archetype. Both
+  Four-Color Control references require Inevitable Defeat.
+- **`excludes`** — a deck playing any of these can't be this archetype. Mono
+  Green Landfall vs Selesnya Landfall share 61% of their slots and were 108 of
+  the 109 margin ties in one run; that's one question, not 108 judgements.
+- **`signature`** — cards in most of one archetype's decks and almost none of any
+  rival's, derived rather than guessed. They settle a photo finish and nothing
+  else: ranking on coverage-plus-bonus let a tell beat a reference that explained
+  more of the deck, so signatures now apply only inside the margin band.
+
+`refine_refs.py --signatures --gates` derives all three from the labelled decks.
+Signature derivation is per-rival, not pooled: pooled, Jeskai Revelation reads as
+4% "elsewhere" in a 745-deck corpus and passes as a signature of both Jeskai
+Control and Four-Color Control, which is exactly backwards.
+
+### The stage that was missing: `cluster_shells.py`
+
+References were only ever built by grouping decks that already had a label, so a
+deck whose archetype had no reference never classified, never fed a reference,
+and returned every run. Nothing in the pipeline could create a category.
+
+`cluster_shells.py` clusters the unmatched on their non-land, 2-or-more-copies
+core, cross-references the melee cache for what organizers called the closest
+lists, and writes a naming note. `--apply` reads the names back and builds the
+references. Naming stays the user's call; the script supplies evidence.
+
+On the first run it found 27 shells of 3+ decks covering 83% of the queue. Those
+were never 200 brews — they were 20-odd decks nobody had named.
+
+### One rolling queue
+
+`[C] MTGO Review Queue.md`, not one dated note per run. Resolved decks drop out
+by themselves, entries carry `first_seen` and `queued_because`, and the
+longest-waiting sort first. The three dated notes it replaces are superseded and
+can be deleted.
+
+### Alias collapse now combines instead of picking
+
+`audit_refs.py --apply-aliases` kept whichever side had more decklists behind it.
+That threw away the better list: collapsing Orzhov, Orzhov Combo and Orzhov
+Midrange kept the 4-deck 15-slot reference over the 3-deck 57-slot one, because
+4 > 3. `refs_store.combine` folds them — every card weighted by the decks behind
+it, best 60 slots, deck counts added. Orzhov Lifegain went 15 slots to 31.
+
+### Where it landed
+
+Sandbox run of the full loop on the same 795 decks: **631 classified (79%)**,
+queue 263 → 164, margin ties 109 → 1, and 115 of the remaining 164 sit in 18
+shells waiting for a name. That's 18 decisions instead of 164.
+
+233 tests, up from 168.
+
+## 1.17.0 - 2026-09-07
+
+The references are a dataset now, not a scratch file. Three scripts wrote
+`archetype_refs.json` and all three were wrong in a different direction, so the
+set reset itself roughly every scrape.
+
+### The two opposite bugs
+
+- **`build_refs_from_melee.py` and `classify_decks.py` replaced the whole
+  `archetypes` dict.** A run only builds references for archetypes it has
+  `MIN_DECKS_FOR_REF` cached decks for, so everything below the bar vanished on
+  every run. Caught on 2026-09-07 when a sandbox `--rebuild-only` dropped
+  `Four-Color Control (Black Base)` (2 cached decks against a minimum of 3),
+  printed "20 archetypes" instead of 21, and exited 0.
+- **`build_mtgtop8_baseline.py` only added labels that were missing.** The
+  opposite failure: a 3-deck mtgtop8 seed outranked a 40-deck local rebuild
+  forever, because "already present" was the whole test.
+
+### What replaced them
+
+- **New `refs_store.py`. Every write to `archetype_refs.json` goes through it.**
+  Merging is the default and nothing is dropped by accident. A test walks the
+  package and fails on any script that opens the file for writing directly.
+- **Entries carry provenance:** `decks`, `source`, `updated`, and an optional
+  `pinned`. Files written by the old scripts self-heal on the first merge, with
+  the deck count read out of the old `notes` string.
+- **Merge policy per label:** absent from the incoming set means keep; `pinned`
+  means keep; otherwise the entry with more decklists behind it wins. Retiring a
+  label takes `drop=[...]`, and a full reset takes the new `--replace-refs`,
+  which backs up to `archetype_refs.pre-replace.json` first.
+- **The write reports what happened** — added, updated, kept, untouched — plus
+  the total decklists behind the references. That total should climb scrape over
+  scrape. If it falls, something replaced instead of merging.
+- **`audit_refs.py` prints the same total,** plus which references are pinned and
+  what wrote the file last.
+
+### Two things that were resetting alongside it
+
+- **`--rebuild-only` overwrote a same-day review note.** The mislabel report is a
+  vault file with hand-typed `Decision:` lines, and a second run on the same day
+  erased every ruling made since the first. It now writes
+  `[C] Mislabeled Decks YYYY-MM-DD (run 2).md` instead, which
+  `apply_corrections.py` still globs.
+- **Mislabel detection ran against the current run's references only,** so a deck
+  matching a reference built three scrapes ago stopped being flagged. It now runs
+  against the merged set.
+
+### References can require a card
+
+- **`"requires": ["Card Name", ...]` gates a reference.** A deck playing none of
+  those cards is ineligible whatever its slot overlap says. Slot overlap can't
+  see a colour: three-colour Jeskai Control shares Jeskai Revelation, Tablet of
+  Discovery, Consult the Star Charts, Stock Up and most of a manabase with
+  four-colour Jeskai Tablet, so it scored 30-40 against the wrong reference and
+  came back through the review queue on every run. Both Four-Color Control
+  references now require Inevitable Defeat, which is the card that actually
+  separates them, and the two standing false flags went away.
+
 ## 1.16.1 - 2026-09-04
 
 Retracting a correction. 1.16.0 said 1.12.0's Spell Snare "appears nowhere in the

@@ -40,6 +40,11 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+
+import refs_store  # noqa: E402  (needs SCRIPT_DIR on the path first)
+import classifier  # noqa: E402
+
 # Data is read from MTG_DATA_DIR (defaults to the script folder so the flat
 # single-format workflow is unchanged). setup.py sets it per format.
 DATA_DIR     = os.environ.get("MTG_DATA_DIR", SCRIPT_DIR)
@@ -71,32 +76,34 @@ def save_cache(cache):
 
 
 def load_refs():
-    if not os.path.exists(REFS_FILE):
-        return {}
-    with open(REFS_FILE, encoding="utf-8") as f:
-        return json.load(f).get("archetypes", {})
+    return refs_store.load(REFS_FILE)
 
 
-def save_refs(archetypes):
-    existing = {}
-    if os.path.exists(REFS_FILE):
-        with open(REFS_FILE, encoding="utf-8") as f:
-            existing = json.load(f)
-    existing["archetypes"] = archetypes
-    existing.setdefault("_note",
-        "Reference mainboard lists for archetype classification. "
-        "Each entry: {mainboard: {card: count}, notes: str}. "
-        "Auto-populated by build_refs_from_melee.py from melee.gg deck URLs.")
-    existing.setdefault("_schema_version", 1)
-    existing.setdefault("_thresholds", {
-        "confident_slots": CONFIDENT_SLOTS,
-        "uncertain_slots": UNCERTAIN_SLOTS,
-        "note": "Match score = sum of min(deck_count, ref_count) per card. "
-                "Confident >= 45/60 slots, uncertain 30-44, review queue < 30.",
-    })
-    with open(REFS_FILE, "w", encoding="utf-8") as f:
-        json.dump(existing, f, indent=2, ensure_ascii=False)
-    print(f"archetype_refs.json updated: {len(archetypes)} archetypes")
+def save_refs(archetypes, replace=False):
+    """
+    Merge this run's references into the file. Never replaces the whole set.
+
+    A rebuild only sees the archetypes it has enough cached decks for, so
+    replacing meant every reference below MIN_DECKS_FOR_REF vanished on every
+    run. refs_store keeps them and only overwrites a label when this run has
+    at least as many decklists behind it. Pass replace=True for a deliberate
+    reset; it backs the old file up first.
+    """
+    return refs_store.save(
+        REFS_FILE, archetypes,
+        source="melee-cache",
+        replace=replace,
+        thresholds={
+            "min_coverage": classifier.MIN_COVERAGE,
+            "min_containment": classifier.MIN_CONTAINMENT,
+            "min_margin": classifier.MIN_MARGIN,
+            "note": "Set by classifier.py. coverage = matched/reference size, "
+                    "containment = matched/deck size, margin = coverage over the "
+                    "runner-up. The old raw 45-of-60 rule is retired: references "
+                    "range from 15 to 63 slots, so a raw bar made small ones "
+                    "impossible to match.",
+        },
+    )
 
 
 # ─── URL collection from pairings CSVs ────────────────────────────────────────
@@ -404,14 +411,18 @@ def build_refs_from_cache(cache, min_decks, fmt="Standard"):
             continue
         ref = build_ref_from_decks(decks)
         if ref:
-            refs[arch] = {
-                "mainboard": ref,
-                "notes": f"Built from {len(decks)} melee.gg decklist(s)",
-            }
+            refs[arch] = refs_store.make_entry(
+                ref,
+                notes=f"Built from {len(decks)} melee.gg decklist(s)",
+                decks=len(decks),
+                source="melee-cache",
+            )
             print(f"  {arch:40s} {len(ref):3d} core cards from {len(decks):4d} lists")
 
     if skipped:
-        print(f"\nSkipped {len(skipped)} archetype(s) with < {min_decks} cached decks:")
+        print(f"\nSkipped {len(skipped)} archetype(s) with < {min_decks} cached decks. "
+              "Any that already have a reference keep it — this run just has nothing "
+              "better to offer:")
         for arch, n in sorted(skipped, key=lambda x: -x[1])[:10]:
             print(f"  {arch}: {n}")
         if len(skipped) > 10:
@@ -431,20 +442,16 @@ def ref_total(ref_main):
 
 
 def best_match(deck_main, refs):
-    """Return (best_arch, best_score, best_ratio) across all refs."""
-    if not refs or not deck_main:
-        return None, 0, 0.0
-    scores = {}
-    for arch, ref in refs.items():
-        ref_mb = ref.get("mainboard", {})
-        if not ref_mb:
-            continue
-        s = match_score(deck_main, ref_mb)
-        scores[arch] = (s, s / ref_total(ref_mb))
-    if not scores:
-        return None, 0, 0.0
-    top = max(scores, key=lambda k: scores[k][1])
-    return top, scores[top][0], scores[top][1]
+    """
+    Return (best_arch, best_score, best_coverage) across all refs.
+
+    Delegates to classifier so melee and MTGO agree. They used to carry two
+    copies of this logic and drifted: one selected on raw slots, the other on
+    ratio, so the same deck could be "Izzet Spellementals" in one script and
+    "Izzet Elementals" in the other.
+    """
+    v = classifier.classify(deck_main, refs)
+    return v.archetype, v.matched, v.coverage
 
 
 def detect_mislabels(cache, refs):
@@ -452,11 +459,22 @@ def detect_mislabels(cache, refs):
     Compare each cached deck's melee label against card-based classification.
 
     Flags two tiers:
-      high  — card-based is confident (>=45 slots) for a DIFFERENT archetype
-      low   — labeled arch scores poorly (<30 slots) AND another fits (30-44)
+      high  — the cards match a DIFFERENT archetype confidently
+      low   — the label's own reference fits badly and another fits better
+
+    Labels are compared after alias folding, so "Izzet" against a deck the cards
+    call "Izzet Spellementals" is not a mislabel, it's the same deck under an
+    organizer's shorthand. Flagging those was a large part of what made the
+    queue unactionable.
 
     Returns sorted list of mislabel dicts (high confidence first).
     """
+    try:
+        from mtg_stats import normalize as _alias
+    except Exception:
+        def _alias(x):
+            return x
+
     mislabels = []
     no_ref_archs = set()
 
@@ -467,25 +485,25 @@ def detect_mislabels(cache, refs):
         labeled = data["archetype"]
         main    = data["mainboard"]
 
-        if labeled not in refs:
+        canon = _alias(labeled)
+        if canon not in refs:
             no_ref_archs.add(labeled)
             continue
 
-        labeled_ref   = refs[labeled].get("mainboard", {})
-        labeled_score = match_score(main, labeled_ref)
-        labeled_ratio = labeled_score / ref_total(labeled_ref)
+        labeled_ref = refs[canon].get("mainboard", {})
+        labeled_score, labeled_ratio, _ = classifier.score_one(main, refs[canon])
 
-        card_arch, card_score, card_ratio = best_match(main, refs)
+        verdict = classifier.classify(main, refs)
+        card_arch, card_score, card_ratio = (
+            verdict.archetype, verdict.matched, verdict.coverage)
 
+        differs = card_arch and _alias(card_arch) != canon
         mislabel = None
-        if (card_arch and card_arch != labeled
-                and card_score >= CONFIDENT_SLOTS):
-            # High: confident match to wrong archetype
+        if differs and verdict.status == "confident":
             mislabel = "high"
-        elif (card_arch and card_arch != labeled
-              and labeled_score < UNCERTAIN_SLOTS
-              and card_score >= UNCERTAIN_SLOTS):
-            # Low: labeled arch doesn't fit, another does
+        elif (differs
+              and labeled_ratio < classifier.UNCERTAIN_COVERAGE
+              and card_ratio >= classifier.UNCERTAIN_COVERAGE):
             mislabel = "low"
 
         if mislabel:
@@ -592,6 +610,22 @@ def write_mislabel_report(mislabels, run_date_str):
                 "",
             ]
 
+    # Never overwrite a review note that already exists. It's a vault note the
+    # user edits by hand, and a second run on the same day would erase every
+    # Decision line typed since the first one. apply_corrections.py globs
+    # "[C] Mislabeled Decks *.md", so a suffixed file is still picked up.
+    if os.path.exists(path):
+        n = 2
+        while True:
+            alt = os.path.join(
+                _PROJECT_DIR, f"[C] Mislabeled Decks {run_date_str} (run {n}).md")
+            if not os.path.exists(alt):
+                break
+            n += 1
+        print(f"  A review note for {run_date_str} already exists and may carry "
+              f"hand-typed decisions, so this run wrote a separate file.")
+        path = alt
+
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
@@ -617,6 +651,10 @@ def parse_args():
                    help=f"Min cached decks needed to build a ref (default {MIN_DECKS_FOR_REF})")
     p.add_argument("--no-mislabel",  action="store_true",
                    help="Skip mislabel detection (faster, useful after --rebuild-only)")
+    p.add_argument("--replace-refs", action="store_true",
+                   help="Throw away every existing reference and keep only what this "
+                        "run built. Backs up to archetype_refs.pre-replace.json first. "
+                        "This is a reset, not a rebuild — the default merges.")
     return p.parse_args()
 
 
@@ -673,15 +711,20 @@ def main():
         print("No refs built — run without --rebuild-only or check cache.")
         return
 
-    # ── 6. Mislabel detection ─────────────────────────────────────────────────
-    if not args.no_mislabel and refs:
-        print(f"\nChecking for mislabeled decks across {cached_ok} cached decks...")
-        mislabels = detect_mislabels(cache, refs)
+    # ── 6. Merge this run's refs into the file ────────────────────────────────
+    save_refs(refs, replace=args.replace_refs)
+    merged = load_refs()
+
+    # ── 7. Mislabel detection ─────────────────────────────────────────────────
+    # Against the merged set, not just what this run rebuilt. A deck matching a
+    # reference built three scrapes ago is still mislabelled today, and checking
+    # only this run's refs quietly stopped flagging it.
+    if not args.no_mislabel and merged:
+        print(f"\nChecking for mislabeled decks across {cached_ok} cached decks "
+              f"against {len(merged)} reference(s)...")
+        mislabels = detect_mislabels(cache, merged)
         print(f"  {len(mislabels)} potential mislabel(s) found")
         write_mislabel_report(mislabels, run_date_str)
-
-    # ── 7. Write refs ─────────────────────────────────────────────────────────
-    save_refs(refs)
 
 
 if __name__ == "__main__":

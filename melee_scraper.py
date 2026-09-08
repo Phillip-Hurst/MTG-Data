@@ -32,6 +32,7 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 from mtg_paths import resolve_data_dir, resolve_output_dir
+import combine_events
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 # ── config ─────────────────────────────────────────────────────────────────────
@@ -504,41 +505,20 @@ def write_csv(rows, path, fields):
     print(f"  ✓  {path}  ({len(rows)} rows)")
 
 
-def rebuild_all_csv(pattern, out_path, fields, dedupe_keys):
+def rebuild_all_csv(kind):
     """
-    Combine every per-tournament CSV matching `pattern` into `out_path`.
-    Dedupes rows on the tuple of `dedupe_keys` so a tournament that gets
-    re-scraped doesn't double up. This runs at the end of every scrape so
-    melee_all_*.csv is rebuilt from per-tournament truth on disk — no more
-    overwriting prior baselines.
+    Rebuild one combined CSV from the per-tournament files on disk.
+
+    Delegates to combine_events, which is the one writer of these files.
+
+    This function used to do the combining itself, with no verdict filter,
+    while validate_events filtered the same file in place and
+    winrate_analysis rebuilt it a third way. Three definitions of one pool
+    meant the contents depended on which script ran last. Quarantined events
+    now stay out because combine_events reads the verdicts, so a scrape can no
+    longer put an off-format event back into the pool it was removed from.
     """
-    paths = sorted(glob.glob(os.path.join(DATA_DIR, pattern)))
-    # Exclude the combined file itself — otherwise every re-run doubles rows
-    paths = [p for p in paths if "_all_" not in os.path.basename(p)]
-    if not paths:
-        print(f"  (no per-tournament files for {pattern} — skipping rebuild)")
-        return
-
-    seen = set()
-    combined = []
-    for p in paths:
-        try:
-            with open(p, encoding="utf-8") as f:
-                for row in csv.DictReader(f):
-                    key = tuple((row.get(k) or "").strip() for k in dedupe_keys)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    combined.append(row)
-        except Exception as e:
-            print(f"  ! couldn't read {p}: {e}")
-            continue
-
-    with open(out_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(combined)
-    print(f"  ✓  {out_path}  ({len(combined)} rows from {len(paths)} tournaments)")
+    return combine_events.rebuild(DATA_DIR, _FMT_SLUG, kind)
 
 
 def update_standings_only_bucket():
@@ -719,24 +699,13 @@ def main():
     # Every format tags its combined files, so two formats never collide even in
     # a shared folder. (Standard used to keep un-prefixed names; that shared
     # filename was the cross-contamination path, and it's gone.)
-    _all_pairings  = os.path.join(DATA_DIR, f"melee_{_FMT_SLUG}_all_pairings.csv")
-    _all_standings = os.path.join(DATA_DIR, f"melee_{_FMT_SLUG}_all_standings.csv")
-
     print(f"\nRebuilding combined CSVs from per-tournament files on disk...")
-    # Glob is format-specific so one format's per-event files can never be folded
-    # into another's combined CSV, even when the two share a folder.
-    rebuild_all_csv(
-        pattern=f"melee_{_FMT_SLUG}_*_pairings.csv",
-        out_path=_all_pairings,
-        fields=PAIRING_FIELDS,
-        dedupe_keys=("tournament_id", "round", "table_num", "player1", "player2"),
-    )
-    rebuild_all_csv(
-        pattern=f"melee_{_FMT_SLUG}_*_standings.csv",
-        out_path=_all_standings,
-        fields=STANDING_FIELDS,
-        dedupe_keys=("tournament_id", "round", "player"),
-    )
+    # combine_events globs per format, so one format's per-event files can never
+    # be folded into another's combined CSV even when the two share a folder.
+    # It also applies the quarantine's verdicts, so a fresh scrape can't put a
+    # previously quarantined event back into the pool.
+    summaries = combine_events.rebuild_all(DATA_DIR, _FMT_SLUG)
+    print(f"  Pool coverage: {os.path.basename(summaries['coverage'])}")
 
     # Refresh the standings-only bucket from disk truth (deck-less events).
     print(f"\nUpdating standings-only bucket...")

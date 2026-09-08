@@ -15,24 +15,59 @@ and for deck construction it usually matters more — it's a slot you could
 actually change tomorrow. So this reads the whole field, and treats "the deck
 has no name yet" as one lens among several rather than the scope.
 
-The four lenses
+The five lenses
 ---------------
   rogue        low adoption, good finishes. The deckbuilding shortlist: cards
                few people are on, that keep beating the field.
   deviation    a card in an archetype's lists that isn't in that archetype's
                goto build. The caster's framing, made countable — signal is a
                card replacing a 4-of, not a card filling a flex slot.
-  trend        adoption moving across the window. A card going from 3 pilots to
-               14 is a different story from one that has always been at 14.
+  trend        adoption moving across the window, split in half. A card going
+               from 3 pilots to 14 is a different story from one that has
+               always been at 14.
+  adoption     the same question with a real time axis and the sideboard
+               included: share of 75s carrying a card, week by week.
   unnamed      shells the classifier can't name, grouped by co-occurrence. Real
                decks with real records and no label. Hand them to deck-check.
+
+The sideboard, added 2026-09-08
+-------------------------------
+Every lens above `adoption` read `mainboard` and nothing else, so a card that
+lived in the 15 was invisible to the whole card layer. That's most of the
+metagame's actual adaptation: a field answers a deck from its sideboard first
+and its maindeck weeks later, if ever.
+
+Phill's 2026-09-07 ruling stands and this respects it: **the sideboard is
+registered and reported, never gated on.** Classification still scores on
+mainboards only, because two red decks staring at the same field board the same
+6 cards and a sideboard coverage score blurs more pairs than it sharpens. This
+is the reporting half, which was measured, agreed, and then never built.
+
+What it finds, on the pool as it stood 2026-09-08 (4 weeks, n = 286/260/132/149):
+
+    spell snare          8.4% -> 18.1% of sideboards
+    torpor orb          11.2% -> 22.8%, peaking at 37.1% in week 3
+    negate              22.7% ->  8.1%
+    soul-guide lantern  29.4% -> 14.8%
+
+Why MTGO only
+-------------
+The melee deck cache holds 393 more lists with sideboards and they are not read
+here. Cache entries carry no event date and no finishing position, so they can
+join neither a weekly bucket nor anything that ranks by placing. Bucketing them
+by `scraped_at` would put a deck in the week we happened to fetch it, which is
+the kind of quiet wrongness this project keeps paying for. Open problem 1 (no
+date column on the melee CSVs) is the fix, and this lens gets 393 more decks
+for free the day it lands.
 
 Usage
 -----
     python card_signal.py                     # everything, current era
     python card_signal.py --lens rogue        # one section
+    python card_signal.py --lens adoption --board side
     python card_signal.py --min-pilots 4 --top 25
     python card_signal.py --archetype "Mono-Green"   # deviations in one deck
+    python card_signal.py --archetype "Dimir Midrange" --lens adoption
     python card_signal.py --write             # save a note
     python card_signal.py --json
 """
@@ -42,7 +77,7 @@ import json
 import os
 import statistics
 import sys
-from datetime import date
+from datetime import date, timedelta
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
@@ -92,8 +127,25 @@ def load_json(path):
         return None
 
 
+def iso_week(date_str):
+    """The Monday of a date's week, as YYYY-MM-DD. '' when there's no date."""
+    if not date_str:
+        return ""
+    try:
+        d = date.fromisoformat(date_str)
+    except ValueError:
+        return ""
+    return (d - timedelta(days=d.weekday())).isoformat()
+
+
 def collect_decks(data_dir, since):
-    """Every MTGO deck in the window, with its archetype if the classifier named one."""
+    """
+    Every MTGO deck in the window, with its archetype if the classifier named one.
+
+    `cards`/`counts` stay mainboard-only so the lenses that predate the
+    sideboard behave exactly as they did. The board is carried alongside in
+    `side`/`side_counts`, with `all_cards`/`all_counts` for the 75.
+    """
     classifications = load_json(os.path.join(data_dir, "mtgo_classifications.json")) or {}
     decks = []
     for fname in ("mtgo_challenge_latest.json", "mtgo_5-0_latest.json"):
@@ -107,14 +159,25 @@ def collect_decks(data_dir, since):
                 except ValueError:
                     place = 0
                 mb = d.get("mainboard") or {}
+                sb = d.get("sideboard") or {}
+                main_counts = {str(c).strip().lower(): n for c, n in mb.items()}
+                side_counts = {str(c).strip().lower(): n for c, n in sb.items()}
+                all_counts = dict(main_counts)
+                for c, n in side_counts.items():
+                    all_counts[c] = all_counts.get(c, 0) + n
                 decks.append({
                     "date": ev.get("date", ""),
+                    "week": iso_week(ev.get("date", "")),
                     "event": ev.get("name", ""),
                     "type": ev.get("event_type", ""),
                     "place": place,
                     "player": d.get("player", ""),
-                    "cards": {str(c).strip().lower() for c in mb},
-                    "counts": {str(c).strip().lower(): n for c, n in mb.items()},
+                    "cards": set(main_counts),
+                    "counts": main_counts,
+                    "side": set(side_counts),
+                    "side_counts": side_counts,
+                    "all_cards": set(all_counts),
+                    "all_counts": all_counts,
                     "archetype": (cls or {}).get("archetype"),
                 })
     return decks
@@ -285,7 +348,149 @@ def trend(decks, min_pilots):
     return rows, mid
 
 
-# ── lens 4: unnamed shells ────────────────────────────────────────────────────
+# ── lens 4: weekly adoption, sideboards included ──────────────────────────────
+
+# A week thinner than this can't carry a per-card share. Weeks 3 and 4 of the
+# 2026-09-08 pool were 132 and 149 decks against 286 in week 1, so the floor is
+# about telling a quiet week from a real move.
+MIN_DECKS_PER_WEEK = 12
+# Below this swing a card hasn't moved, it's breathing.
+MIN_ADOPTION_MOVE = 4.0
+
+BOARDS = {
+    "main": ("cards", "counts", "maindecks"),
+    "side": ("side", "side_counts", "sideboards"),
+    "75":   ("all_cards", "all_counts", "75s"),
+}
+
+
+def weekly_buckets(decks):
+    """
+    (weeks, by_week, dropped). Weeks are ordered and thin ones are dropped.
+
+    Dateless decks are dropped too, and counted. A deck with no date can't be
+    put in a week, and putting it in the wrong one is worse than leaving it
+    out — guardrail 1, an absent value is not a passing value.
+    """
+    dropped = {"no_date": 0, "thin_weeks": {}}
+    by_week = collections.defaultdict(list)
+    for d in decks:
+        if not d.get("week"):
+            dropped["no_date"] += 1
+            continue
+        by_week[d["week"]].append(d)
+    weeks = []
+    for w in sorted(by_week):
+        if len(by_week[w]) < MIN_DECKS_PER_WEEK:
+            dropped["thin_weeks"][w] = len(by_week[w])
+            continue
+        weeks.append(w)
+    return weeks, by_week, dropped
+
+
+def adoption(decks, board="side", min_pilots=DEFAULT_MIN_PILOTS, attrs=None):
+    """
+    Share of decks carrying each card, week by week.
+
+    This is `trend` with a real time axis and the option to look at the board.
+    `trend` splits the window in half, which answers "did this move" and can't
+    answer "is it still moving" or "when did it start". A field's answer to a
+    deck usually arrives in the sideboard one week and the maindeck three weeks
+    later, and the half-split flattens exactly that shape.
+
+    Returns (rows, weeks, dropped). Each row carries the per-week share, the
+    first-to-last move, the peak, and the card's colour and type when the pool
+    file has them.
+    """
+    cards_key, counts_key, _label = BOARDS[board]
+    weeks, by_week, dropped = weekly_buckets(decks)
+    if len(weeks) < 2:
+        return [], weeks, dropped
+
+    share, holders = {}, collections.defaultdict(set)
+    for w in weeks:
+        ds = by_week[w]
+        c = collections.Counter()
+        for d in ds:
+            for card in d[cards_key]:
+                c[card] += 1
+                holders[card].add(d["player"])
+        share[w] = {k: v / len(ds) for k, v in c.items()}
+
+    rows = []
+    for card in set().union(*(set(share[w]) for w in weeks)):
+        if card in IGNORE:
+            continue
+        if len(holders[card]) < min_pilots:
+            continue
+        series = [100 * share[w].get(card, 0.0) for w in weeks]
+        move = series[-1] - series[0]
+        if abs(move) < MIN_ADOPTION_MOVE:
+            continue
+        counts = [d[counts_key].get(card, 0) for w in weeks for d in by_week[w]
+                  if card in d[cards_key]]
+        a = (attrs or {}).get(card) or {}
+        rows.append({
+            "card": card,
+            "series": [round(x, 1) for x in series],
+            "move": round(move, 1),
+            "peak": round(max(series), 1),
+            "peak_week": weeks[series.index(max(series))],
+            "pilots": len(holders[card]),
+            "avg_copies": round(statistics.mean(counts), 1) if counts else 0,
+            "colors": "".join(a.get("colors") or []) or ("C" if a else ""),
+            "type": (a.get("type_line") or "").split(" — ")[0],
+            "cmc": a.get("cmc"),
+        })
+    rows.sort(key=lambda r: -abs(r["move"]))
+    return rows, weeks, dropped
+
+
+def archetype_adoption(decks, archetype, board="75", attrs=None):
+    """
+    Average copies of each card in one archetype, week by week.
+
+    Field-wide share answers "is the format doing this". This answers "is this
+    deck doing this", which is the one that reads as a deliberate hedge: Dimir
+    Midrange going 1.5 -> 2.3 Flashfreeze over 4 weeks is 30 pilots
+    independently deciding the same thing about red and green.
+    """
+    _cards_key, counts_key, _label = BOARDS[board]
+    ds = [d for d in decks if (d["archetype"] or "").lower() == archetype.lower()]
+    if not ds:
+        return [], [], {}
+    weeks, by_week, dropped = weekly_buckets(ds)
+    # An archetype is a slice of the field, so it needs its own thinner floor.
+    weeks = [w for w in sorted(by_week) if len(by_week[w]) >= 4]
+    if len(weeks) < 2:
+        return [], weeks, dropped
+
+    every = set().union(*(d[_cards_key] for d in ds))
+    rows = []
+    for card in every:
+        if card in IGNORE:
+            continue
+        series = []
+        for w in weeks:
+            g = by_week[w]
+            series.append(sum(d[counts_key].get(card, 0) for d in g) / len(g))
+        move = series[-1] - series[0]
+        if abs(move) < 0.4:
+            continue
+        a = (attrs or {}).get(card) or {}
+        rows.append({
+            "card": card,
+            "series": [round(x, 1) for x in series],
+            "move": round(move, 1),
+            "n_per_week": [len(by_week[w]) for w in weeks],
+            "colors": "".join(a.get("colors") or []) or ("C" if a else ""),
+            "type": (a.get("type_line") or "").split(" — ")[0],
+        })
+    rows.sort(key=lambda r: -r["move"])
+    return rows, weeks, dropped
+
+
+# ── lens 5: unnamed shells ────────────────────────────────────────────────────
 
 def shell_candidates(decks, min_pilots):
     unnamed = [d for d in decks if not d["archetype"]]
@@ -354,7 +559,8 @@ def group_into_shells(rows, unnamed, min_decks=4, overlap=0.45):
 
 # ── render ────────────────────────────────────────────────────────────────────
 
-def render(decks, baseline, lenses, min_pilots, top, only_archetype):
+def render(decks, baseline, lenses, min_pilots, top, only_archetype, opts=None):
+    opts = opts or {}
     out = []
     named = [d for d in decks if d["archetype"]]
     unnamed_n = len(decks) - len(named)
@@ -430,6 +636,69 @@ def render(decks, baseline, lenses, min_pilots, top, only_archetype):
                            f"{r['late_pct']:6.1f}% {r['delta']:>+6.1f}")
         out.append("")
 
+    if "adoption" in lenses:
+        board = opts.get("board", "side")
+        attrs = opts.get("attrs") or {}
+        label = BOARDS[board][2]
+        if only_archetype:
+            rows, weeks, dropped = archetype_adoption(decks, only_archetype,
+                                                      board="75", attrs=attrs)
+            out.append(f"## Adoption — average copies in the 75, {only_archetype}")
+            out.append("")
+            out.append("Field-wide share says the format is doing something. This says "
+                       "this deck is, which is what a deliberate hedge looks like.")
+            out.append("")
+            if not rows:
+                out.append(f"  Not enough weeks with 4+ {only_archetype} decks.")
+            else:
+                out.append(f"{'card':30s} {'C':>3s} " +
+                           " ".join(f"{w[5:]:>6s}" for w in weeks) + f" {'move':>6s}")
+                out.append("-" * (34 + 7 * len(weeks) + 7))
+                for r in rows[:top]:
+                    out.append(f"{r['card'][:30]:30s} {r['colors']:>3s} " +
+                               " ".join(f"{v:6.1f}" for v in r["series"]) +
+                               f" {r['move']:>+6.1f}")
+                out.append("")
+                out.append(f"  decks per week: "
+                           f"{', '.join(str(n) for n in rows[0]['n_per_week'])}")
+        else:
+            rows, weeks, dropped = adoption(decks, board=board,
+                                            min_pilots=min_pilots, attrs=attrs)
+            out.append(f"## Adoption — share of {label} carrying the card, by week")
+            out.append("")
+            out.append("A field answers a deck from its sideboard first and its "
+                       "maindeck weeks later, if ever. The half-window split in "
+                       "`trend` flattens exactly that shape, so this keeps the weeks "
+                       "apart. Two cards moving opposite ways in the same colour is "
+                       "usually one swap, not two decisions.")
+            out.append("")
+            if not rows:
+                out.append(f"  Fewer than 2 weeks cleared {MIN_DECKS_PER_WEEK} decks, "
+                           "or nothing moved.")
+            else:
+                out.append(f"{'card':28s} {'C':>3s} {'type':>9s} " +
+                           " ".join(f"{w[5:]:>6s}" for w in weeks) +
+                           f" {'move':>7s} {'pilots':>6s}")
+                out.append("-" * (50 + 7 * len(weeks) + 8))
+                for r in rows[:top]:
+                    thin = "*" if r["pilots"] < 4 else " "
+                    out.append(f"{r['card'][:28]:28s} {r['colors']:>3s} "
+                               f"{r['type'][:9]:>9s} " +
+                               " ".join(f"{v:5.1f}%" for v in r["series"]) +
+                               f" {r['move']:>+7.1f} {r['pilots']:5d}{thin}")
+                if not attrs:
+                    out.append("")
+                    out.append("  Colour and type are blank: the card pool file has no "
+                               "attributes. Run `python build_card_pool.py "
+                               "--max-age-days 0`.")
+        if dropped.get("no_date"):
+            out.append("")
+            out.append(f"  {dropped['no_date']} deck(s) had no date and were left out.")
+        if dropped.get("thin_weeks"):
+            thin = ", ".join(f"{w} ({n})" for w, n in sorted(dropped["thin_weeks"].items()))
+            out.append(f"  weeks under {MIN_DECKS_PER_WEEK} decks, dropped: {thin}")
+        out.append("")
+
     if "unnamed" in lenses:
         shells, unnamed = shell_candidates(decks, min_pilots)
         out.append("## Unnamed shells — whole decks with no archetype yet")
@@ -465,8 +734,10 @@ def main():
     p.add_argument("--format", default=None, help="Format. Overrides mtg_config.json.")
     p.add_argument("--since", default=None, help="Window start YYYY-MM-DD. Default: era start.")
     p.add_argument("--lens", nargs="*", default=None,
-                   choices=["rogue", "deviation", "trend", "unnamed"],
-                   help="Sections to print. Default: all four.")
+                   choices=["rogue", "deviation", "trend", "adoption", "unnamed"],
+                   help="Sections to print. Default: all five.")
+    p.add_argument("--board", default="side", choices=["main", "side", "75"],
+                   help="Which board the adoption lens reads. Default: side.")
     p.add_argument("--archetype", default=None, help="Limit deviations to one archetype.")
     p.add_argument("--min-pilots", type=int, default=DEFAULT_MIN_PILOTS)
     p.add_argument("--top", type=int, default=15)
@@ -487,7 +758,16 @@ def main():
         return 1
 
     baseline = field_baseline(decks)
-    lenses = args.lens or ["rogue", "deviation", "trend", "unnamed"]
+    lenses = args.lens or ["rogue", "deviation", "trend", "adoption", "unnamed"]
+    # Colour, type and mana value for the adoption table. Empty on a pool
+    # cached before 2026-09-08; the lens says so rather than printing blanks
+    # and letting a reader assume the cards are colourless.
+    try:
+        import build_card_pool
+        attrs = build_card_pool.load_attributes(fmt, data_dir)
+    except Exception:
+        attrs = {}
+    opts = {"board": args.board, "attrs": attrs}
 
     if args.json:
         print(json.dumps({
@@ -497,12 +777,15 @@ def main():
                       for r in rogue_cards(decks, baseline, args.min_pilots)],
             "deviations": deviations(decks, baseline, args.archetype),
             "trend": trend(decks, args.min_pilots)[0],
+            "adoption": adoption(decks, board=args.board,
+                                 min_pilots=args.min_pilots, attrs=attrs)[0],
             "shells": shell_candidates(decks, args.min_pilots)[0],
         }, indent=1))
         return 0
 
     header = f"\n{fmt} — {era.get('label', 'current era')}, from {since}\n"
-    body = render(decks, baseline, lenses, args.min_pilots, args.top, args.archetype)
+    body = render(decks, baseline, lenses, args.min_pilots, args.top,
+                  args.archetype, opts=opts)
     print(header)
     print(body)
 

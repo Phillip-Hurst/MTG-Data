@@ -278,23 +278,39 @@ def test_rewrite_keeps_only_the_seat_and_drops_quarantined_events(tmp_path):
     End to end on the real rewrite: a quarantined event disappears, a salvaged
     event keeps only its own seat, and a Standard player paired against a
     Modern player is dropped because that match never happened.
+
+    2026-09-08: the fixture now writes per-event CSVs rather than a combined
+    one. The combined files became derived artifacts, rebuilt from the
+    per-event files with the verdicts applied, because filtering the combined
+    file in place meant every run filtered an already-filtered file and rows
+    could never come back. See tests/test_combine_events.py.
     """
     import csv
-    rows = [
+    import combine_events as ce
+
+    def write_event(tid, rows):
+        with open(tmp_path / f"melee_standard_{tid}_pairings.csv", "w",
+                  newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=ce.FIELDS["pairings"],
+                               extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)
+
+    seat_rows = [
         pairing("std0", "std1", "a", "b", "std0"),      # seat event, both in seat
         pairing("std0", "mod0", "a", "c", "std0"),      # seat event, cross-format
-        pairing("clean1", "clean2", "d", "e", "clean1"),
-        pairing("bad1", "bad2", "f", "g", "bad1"),
     ]
-    rows[0]["tournament_id"] = rows[1]["tournament_id"] = "999"
-    rows[2]["tournament_id"] = "111"
-    rows[3]["tournament_id"] = "437430"
+    for i, r in enumerate(seat_rows):
+        r["tournament_id"] = "999"
+        r["table_num"] = str(i + 1)
+    clean = pairing("clean1", "clean2", "d", "e", "clean1")
+    clean["tournament_id"] = "111"
+    bad = pairing("bad1", "bad2", "f", "g", "bad1")
+    bad["tournament_id"] = "437430"
 
-    path = tmp_path / "melee_standard_all_pairings.csv"
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-        w.writeheader()
-        w.writerows(rows)
+    write_event("999", seat_rows)
+    write_event("111", [clean])
+    write_event("437430", [bad])
 
     verdicts = [
         {"tournament_id": "999", "verdict": "seat", "keep_players": ["std0", "std1"]},
@@ -303,15 +319,48 @@ def test_rewrite_keeps_only_the_seat_and_drops_quarantined_events(tmp_path):
     ]
     summary = ve.rewrite_combined(str(tmp_path), "Standard", verdicts)
 
-    assert summary["pairings"]["before"] == 4
+    assert summary["pairings"]["before"] == 4, \
+        "before is what the per-event files offered, not what the file held"
     assert summary["pairings"]["after"] == 2
+    assert summary["pairings"]["removed"] == 2
 
+    path = tmp_path / "melee_standard_all_pairings.csv"
     with open(path, encoding="utf-8") as f:
         kept = list(csv.DictReader(f))
     assert {r["tournament_id"] for r in kept} == {"999", "111"}
     assert all(r["player2"] != "mod0" for r in kept)
-    assert (tmp_path / "melee_standard_all_pairings.raw.csv").exists(), \
-        "the original pool must be preserved"
+
+
+def test_a_second_validation_run_does_not_shrink_the_pool(tmp_path):
+    """
+    The 2026-09-08 bug, pinned at the validator level.
+
+    rewrite_combined read the combined CSV, filtered it, and wrote it back, so
+    the second run filtered the first run's output. On the live pool that took
+    melee_standard_all_standings.csv from 553 rows to 312 to 241 while 27
+    per-event files sat on disk. Running the validator twice must now leave the
+    same pool both times.
+    """
+    import csv
+    import combine_events as ce
+
+    rows = [pairing(f"p{i}", f"q{i}", "a", "b", f"p{i}") for i in range(6)]
+    for i, r in enumerate(rows):
+        r["tournament_id"] = "111"
+        r["table_num"] = str(i + 1)
+    with open(tmp_path / "melee_standard_111_pairings.csv", "w", newline="",
+              encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=ce.FIELDS["pairings"], extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+
+    verdicts = [{"tournament_id": "111", "verdict": "ok"}]
+    first = ve.rewrite_combined(str(tmp_path), "Standard", verdicts)
+    second = ve.rewrite_combined(str(tmp_path), "Standard", verdicts)
+
+    assert first["pairings"]["after"] == 6
+    assert second["pairings"]["after"] == 6, \
+        "a second run must not filter the first run's output"
 
 
 def test_thin_event_is_flagged_not_dropped():

@@ -39,6 +39,7 @@ sys.path.insert(0, SCRIPT_DIR)
 
 from mtg_paths import resolve_data_dir  # noqa: E402
 import mtg_era  # noqa: E402
+import refs_store  # noqa: E402
 
 # Two references sharing this much of their mainboard will produce near-tied
 # match scores. classify_decks picks on raw slot overlap with no margin, so a
@@ -82,31 +83,33 @@ def apply_aliases(refs):
     """
     Collapse aliased labels onto the canonical name from mtg_stats.
 
-    Two references for one deck is worse than one: classify_decks picks on raw
-    slot overlap with no margin, so near-tied refs are resolved by dictionary
-    order. When both sides of an alias exist, keep the reference built from
-    more decklists — a ref from 10 lists describes the deck better than one
-    from 3.
+    Two references for one deck is worse than one: near-tied refs used to be
+    resolved by dictionary order, and the Izzet trio sat at 94% slot overlap for
+    weeks.
+
+    The old rule kept whichever side had more decklists behind it. That threw
+    away the better list — collapsing Orzhov, Orzhov Combo and Orzhov Midrange
+    kept the 4-deck 15-slot reference over the 3-deck 57-slot one, because
+    4 > 3, and left an archetype that could never clear the confidence bar.
+
+    Now the contributors are combined: every card weighted by the decks behind
+    it, best 60 slots kept, deck counts added. See refs_store.combine.
     """
     try:
-        from mtg_stats import ARCHETYPE_ALIASES, normalize
+        from mtg_stats import normalize
     except Exception:
         return refs, []
 
-    def weight(ref):
-        m = re.search(r"(\d+)", str(ref.get("notes", "")))
-        return int(m.group(1)) if m else 0
-
-    merged, moves = {}, []
+    groups, moves = {}, []
     for name, ref in refs.items():
         canon = normalize(name)
         if canon != name:
             moves.append((name, canon))
-        if canon in merged:
-            if weight(ref) > weight(merged[canon]):
-                merged[canon] = ref
-        else:
-            merged[canon] = ref
+        groups.setdefault(canon, []).append(ref)
+
+    merged = {}
+    for canon, entries in groups.items():
+        merged[canon] = refs_store.combine(entries) if len(entries) > 1 else entries[0]
     return merged, moves
 
 
@@ -256,14 +259,17 @@ def main():
         if args.dry_run:
             print("\n--dry-run: nothing written.")
             return 0
-        backup = os.path.join(data_dir, "archetype_refs.pre-alias.json")
-        with open(backup, "w", encoding="utf-8") as f:
-            json.dump(refs_doc, f, indent=2, ensure_ascii=False)
-        refs_doc["archetypes"] = merged
-        refs_doc["_aliases_applied"] = True
-        with open(os.path.join(data_dir, "archetype_refs.json"), "w", encoding="utf-8") as f:
-            json.dump(refs_doc, f, indent=2, ensure_ascii=False)
-        print(f"Written. Previous version kept at {os.path.basename(backup)}.")
+        # This one genuinely removes labels, so it's the one place a replace is
+        # right. It still goes through refs_store, which takes the backup and
+        # keeps the provenance fields consistent with every other writer.
+        path = os.path.join(data_dir, "archetype_refs.json")
+        refs_store.save(path, merged, source="alias-merge", replace=True,
+                        backup_name="archetype_refs.pre-alias.json", quiet=True)
+        doc = refs_store.load_doc(path)
+        doc["_aliases_applied"] = True
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(doc, f, indent=2, ensure_ascii=False)
+        print("Written. Previous version kept at archetype_refs.pre-alias.json.")
         print("Re-run classify_decks.py --rerun so live decks pick up the merged names.")
         return 0
 
@@ -284,6 +290,20 @@ def main():
     if era:
         print(f"  Era: {era.get('label')}")
     print(f"  Source: {refs_doc.get('_source', 'unrecorded')}")
+    # The evidence behind the references, which is the number that should climb
+    # scrape over scrape. If it drops, something replaced instead of merging.
+    behind = sum(refs_store.decks_behind(r) for r in refs.values())
+    unattributed = sum(1 for r in refs.values() if refs_store.decks_behind(r) == 0)
+    pinned = sorted(k for k, r in refs.items() if isinstance(r, dict) and r.get("pinned"))
+    line = f"  Decklists behind them: {behind}"
+    if unattributed:
+        line += f"  ({unattributed} reference(s) record no count)"
+    print(line)
+    if pinned:
+        print(f"  Pinned (never auto-overwritten): {', '.join(pinned)}")
+    last = refs_doc.get("_last_write")
+    if last:
+        print(f"  Last write: {last.get('source')} on {last.get('date')}")
     print()
 
     errors = [f for f in findings if f["level"] == "error"]

@@ -49,6 +49,7 @@ in the repo. They are a record of one person's own games. `package.py` drops
 `play_log*.jsonl` and root `[C] *.md`, and `.gitignore` covers both.
 """
 import argparse
+import collections
 import json
 import os
 import sys
@@ -135,10 +136,51 @@ GRADE_WEIGHTS = {"punt": 2, "close": 1, "correct": 0}
 # says `hand` and the run reported 0 problems while dropping three hands. A
 # script that does nothing looks exactly like one that worked.
 ROW_KEYS = frozenset((
-    "date", "session_id", "match_id", "source", "era", "your_deck",
+    "date", "session_id", "match_id", "source", "era", "format", "your_deck",
     "their_deck", "game", "result", "on_the_play", "review_note",
     "findings", "hand", "sideboard", "pace", "interview",
 ))
+# `format` is optional so the ledger written before 2026-09-08 still validates.
+# It is inferred from `era` when absent; see `row_format`.
+#
+# Why it exists: the ledger had no format field and resolve_dir sorts the
+# insights notes by format, so 29 Historic games and 12 Standard games were
+# rolling up into one Standard profile. The `era` field recorded the difference
+# (`historic-2026-08` against `the-hobbit-post-ban-2026-08-10`) and nothing
+# partitioned on it, so "Golgari Yawgmoth vs Goblin Charbelcher, 4 games" sat
+# in the folder a Standard question reads.
+#
+# Habits are treated as crossing formats on purpose: how someone plays travels
+# with them. A deck and a matchup record do not, because a Historic deck is not
+# an answer to "what should I play in Standard this weekend".
+ERA_FORMAT_HINTS = (
+    ("historic", "Historic"),
+    ("pioneer", "Pioneer"),
+    ("modern", "Modern"),
+    ("legacy", "Legacy"),
+    ("vintage", "Vintage"),
+    ("pauper", "Pauper"),
+    ("alchemy", "Alchemy"),
+)
+
+
+def row_format(row, default="Standard"):
+    """
+    The format a logged game was played in.
+
+    Explicit `format` wins. Failing that the era slug is read, because every
+    era slug this project has written carries the format when it isn't
+    Standard. Failing both, the run's format, which is the honest reading of a
+    ledger that predates the field.
+    """
+    explicit = (row.get("format") or "").strip()
+    if explicit:
+        return explicit
+    era = (row.get("era") or "").strip().lower()
+    for needle, fmt in ERA_FORMAT_HINTS:
+        if needle in era:
+            return fmt
+    return default
 ROW_REQUIRED = ("date", "session_id", "match_id", "your_deck", "their_deck",
                 "game", "result", "findings")
 FINDING_KEYS = frozenset((
@@ -471,6 +513,22 @@ def _sideboard_balance(row, line_no):
             "aside for this game and its findings still count: diff the "
             "decklists in the log again rather than counting from memory."
             % (line_no, len(n_in), len(n_out)))
+
+
+def split_by_format(rows, fmt):
+    """
+    (this_format, other_formats). Never drops a row silently.
+
+    The ledger is one file per insights folder and the folder is per format, so
+    a row from another format is a row in the wrong place rather than a row to
+    discard. The caller reports the ones it set aside and says how to roll them
+    up, and the file is left exactly as it was: moving somebody's play history
+    between folders is not a thing a rollup should do on its own.
+    """
+    mine, theirs = [], []
+    for row in rows:
+        (mine if row_format(row, fmt).lower() == fmt.lower() else theirs).append(row)
+    return mine, theirs
 
 
 def read_ledger(path, patterns=None):
@@ -1673,7 +1731,49 @@ def main():
             print("  %s" % msg)
         return 1
 
+    # Split on format. A deck, a matchup record and a kept hand belong to one
+    # format; a habit does not. So the decks and matchups below count this
+    # format's games, and the habits count every game in the ledger.
+    all_rows = rows
+    rows, other_format = split_by_format(rows, fmt)
+    if other_format:
+        by_fmt = collections.Counter(row_format(r, fmt) for r in other_format)
+        print("Ledger holds %d game(s) from another format: %s"
+              % (len(other_format),
+                 ", ".join("%s %d" % (f, n) for f, n in sorted(by_fmt.items()))))
+        print("  decks, matchups and hands below are %s only (%d game(s))."
+              % (fmt, len(rows)))
+        print("  habits are counted across all %d game(s): how someone plays "
+              "travels between formats, and a deck does not." % len(all_rows))
+        for other in sorted(by_fmt):
+            print("  that format's own deck notes: python play_profile.py "
+                  "--format %s" % other)
+        print("  nothing was moved or deleted.")
+        print()
+
+    # Only when the ledger had rows and none of them were this format's. An
+    # empty ledger is a different state and already has its own answer below:
+    # a profile that says there is nothing here yet.
+    if not rows and other_format:
+        print("No %s games in %s." % (fmt, ledger))
+        print("All %d row(s) are from another format. Nothing to roll up here."
+              % len(other_format))
+        return 1
+
     rollup = roll_up(rows, args.min_occurrences, args.min_sessions, patterns)
+    if other_format:
+        # Habits from the whole ledger, spliced over the format-local ones.
+        # Counting them per format would report a habit as cured because the
+        # player spent a fortnight in another format, which is the same
+        # mistake the deck-aware fade rule already exists to avoid.
+        cross = roll_up(all_rows, args.min_occurrences, args.min_sessions, patterns)
+        rollup["habits"] = cross["habits"]
+        rollup["work_on"] = cross.get("work_on")
+        rollup["habit_sample"] = {
+            "games": len(all_rows),
+            "formats": dict(collections.Counter(
+                row_format(r, fmt) for r in all_rows)),
+        }
 
     if args.json:
         # Aggregates only unless --full is asked for. The old payload came back
@@ -1858,8 +1958,36 @@ def main():
             print("Could not write the deck profile for %s: %s" % (deck, exc))
             continue
         print("Wrote %s  (%d game(s))" % (path, deck_rollup["games"]))
+
+    # A deck note this run didn't write is a note for a deck that isn't in this
+    # format any more. It is left alone and named, because a stale generated
+    # note that nobody mentions is indistinguishable from a current one, and
+    # this folder's whole job is to answer "what do I play in this format".
+    stale = _stale_deck_notes(os.path.dirname(profile), by_deck)
+    if stale:
+        print()
+        print("%d deck note(s) here belong to no %s deck in the ledger:"
+              % (len(stale), fmt))
+        for name in stale:
+            print("  %s" % name)
+        print("  they were not rewritten. Move or delete them once you've "
+              "checked which format they came from.")
     print()
     return 2 if problems else 0
+
+
+def _stale_deck_notes(folder, by_deck):
+    """Deck notes on disk that this run did not write. Sorted, names only."""
+    current = {deck_filename(d) for d in by_deck}
+    prefix = DECK_PROFILE_NAME.split("%s")[0]
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    return sorted(
+        n for n in names
+        if n.startswith(prefix) and n.endswith(".md") and n not in current
+        and not n.endswith(".pre-rollup.md"))
 
 
 if __name__ == "__main__":

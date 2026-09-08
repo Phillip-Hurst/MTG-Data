@@ -1,9 +1,14 @@
 """
 Render a clean matchup matrix and a Jeskai vs 4-Color Control side-by-side comparison.
-Reads the per-tournament pairing CSVs (same loader as winrate_analysis.py).
+
+Reads the validated pool through combine_events and names every deck through
+deck_labels, so the matrix speaks the same vocabulary as the meta-share table
+rather than whatever each organizer typed.
 """
 import csv, os, glob, collections, sys
 
+import combine_events
+import deck_labels
 from mtg_stats import classify_row
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
@@ -20,17 +25,24 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR   = os.environ.get("MTG_DATA_DIR", SCRIPT_DIR)
 OUTPUT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
 OUT_TXT    = os.path.join(OUTPUT_DIR, "transcripts", "matchup_matrix.txt")
+# Format slug tags the combined CSVs so two formats never share a filename.
+FMT_SLUG   = (os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard").lower()
 
 MIN_MATCHUP_GAMES = 10
 
 def load_pairings():
-    rows = []
-    for p in glob.glob(os.path.join(DATA_DIR, "melee_*_pairings.csv")):
-        if os.path.basename(p).endswith("_all_pairings.csv"):
-            continue
-        with open(p, encoding="utf-8") as f:
-            rows.extend(list(csv.DictReader(f)))
-    return rows
+    """
+    The validated pairing pool, through the one loader.
+
+    This used to glob the per-event CSVs directly, which skipped the seat
+    filter and read a different pool from the one build_baseline.py reports
+    meta share on. Whichever script had last written the combined file decided
+    what a reader saw, and event_quarantine_<fmt>.json stayed dated and in-era
+    either way.
+    """
+    rows, summary = combine_events.load_pool(DATA_DIR, FMT_SLUG, "pairings",
+                                            resolve_names=True)
+    return rows, summary
 
 def compute(rows):
     """Tally per-deck games and decided matchup wins via the shared classifier.
@@ -142,12 +154,15 @@ def control_comparison(deck_games, matchup_wins):
     return "\n".join(out)
 
 def main():
-    rows = load_pairings()
+    rows, summary = load_pairings()
     if not rows:
-        print(f"No melee pairing files found in:\n  {DATA_DIR}")
+        print(f"No melee pairing rows in:\n  {DATA_DIR}")
         print("Run the melee scraper first (scrape.bat / scrape.sh, or "
-              "mtg_fetch.py), then try again.")
+              "mtg_fetch.py), then validate_events.py, then try again.")
         return
+    print(f"Pool: {combine_events.describe_pool(summary)}")
+    for line in deck_labels.pairing_report_lines(summary["label_stats"]):
+        print(line)
     dg, mw = compute(rows)
 
     # 18 most-played decks

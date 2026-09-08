@@ -34,6 +34,7 @@ depended on. The bundle was broken in exactly the way a passing run cannot show
 you. `REQUIRED` below now fails the build if required content goes missing.
 """
 import argparse
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -89,8 +90,14 @@ EXCLUDE_FILES = {
 # Magic decisions go wrong, true regardless of who was holding the cards. It is
 # not optional. play_profile.py exits 1 without it, so a bundle that drops it
 # installs cleanly and then refuses to run.
+# archetype_vocabulary.json is deck-check's first lookup, per its SKILL.md: the
+# format's published names with the three cards that define each one. Without it
+# the suggestion step falls through to lookup 2 on every deck, and the skill
+# still runs, so a bundle that drops it fails quietly rather than loudly.
+# fetch_vocabulary.py shipped without it until 2026-09-08.
 KEEP_JSON = {"set_releases.json", "mtg_config.json", "bans.json",
-             "archetype_names.json", "play_patterns.json"}
+             "archetype_names.json", "play_patterns.json",
+             "archetype_vocabulary.json"}
 
 # A bundle carries the plugin, not one person's metagame reading. The archetype
 # notes are working notes: they stay on the author's disk, out of the repo, and
@@ -119,6 +126,16 @@ REQUIRED = {
     "play profile script": lambda p: p == Path("play_profile.py"),
     "play pattern registry": lambda p: p == Path("play_patterns.json"),
     "archetype names": lambda p: p == Path("archetype_names.json"),
+    # deck-check's lookup 1. fetch_vocabulary.py refreshes it and did ship on
+    # its own, which is the worst of both: the refresher present, the seed gone.
+    "archetype vocabulary": lambda p: p == Path("archetype_vocabulary.json"),
+    # Imported by validate_events, melee_scraper, matchup_matrix,
+    # winrate_analysis and update_archetypes. A bundle without it installs
+    # cleanly and then fails at import on the first run of any of them.
+    "combined pool writer": lambda p: p == Path("combine_events.py"),
+    # The one place a result becomes an archetype name, for standings and
+    # pairings alike.
+    "deck label resolver": lambda p: p == Path("deck_labels.py"),
 }
 
 
@@ -129,6 +146,17 @@ def should_ship(rel: Path) -> bool:
     if rel.name in EXCLUDE_FILES:
         return False
     if rel.name.endswith((".log", ".txt", ".html", ".csv", ".jsonl")):
+        return False
+    # Local scrape backups and derived pool files. .gitignore already keeps
+    # these out of the repo (`*.json.bak`), but the bundle is built from the
+    # working directory rather than from git, so an untracked file ships
+    # anyway. On 2026-09-08 that was 2.7 MB of one person's scraped MTGO data
+    # in a public plugin: melee_deck_cache.json.bak, mtgo_classifications.json.bak
+    # and two more.
+    if rel.name.endswith((".bak", ".raw.csv", ".quarantined.csv",
+                          ".pre-rebuild.csv")):
+        return False
+    if ".pre-" in rel.name and rel.suffix in (".json", ".jsonl", ".md", ".csv"):
         return False
 
     # Everything under skills/ ships, including reference notes, except one
@@ -204,10 +232,35 @@ def main() -> int:
         for rel in shipped:
             print(f"  Would add: {PLUGIN_NAME}/{rel.as_posix()}")
     else:
-        with zipfile.ZipFile(out_file, "w", zipfile.ZIP_DEFLATED) as zf:
-            for rel in shipped:
-                zf.write(repo / rel, f"{PLUGIN_NAME}/{rel.as_posix()}")
-                print(f"  Added: {PLUGIN_NAME}/{rel.as_posix()}")
+        # Build to a temp file and rename on success. A file that becomes
+        # unreadable between the pre-check and the write (a OneDrive
+        # placeholder evicting mid-run is the way this happens) used to raise
+        # partway through the zip, leaving a truncated .plugin on disk that
+        # looks exactly like a finished one.
+        tmp_file = out_file.with_suffix(out_file.suffix + ".tmp")
+        try:
+            with zipfile.ZipFile(tmp_file, "w", zipfile.ZIP_DEFLATED) as zf:
+                for rel in shipped:
+                    zf.write(repo / rel, f"{PLUGIN_NAME}/{rel.as_posix()}")
+                    print(f"  Added: {PLUGIN_NAME}/{rel.as_posix()}")
+        except OSError as e:
+            leftover = None
+            try:
+                tmp_file.unlink()
+            except OSError:
+                # Can happen on a synced folder that refuses the delete. Say so
+                # rather than claiming a clean failure; a stray .tmp somebody
+                # later renames is the same partial bundle by another name.
+                leftover = tmp_file if tmp_file.exists() else None
+            print(f"\nCould not read a file while zipping: {e}")
+            print(f"{out_file.name} was not replaced; any previous bundle is "
+                  "untouched.")
+            if leftover:
+                print(f"  A partial build is at {leftover.name} and could not "
+                      "be removed. Delete it by hand.")
+            print("On OneDrive, mark the repo folder 'Always keep on this device'.")
+            return 1
+        os.replace(tmp_file, out_file)
 
     verb = "Would write" if args.dry_run else "Wrote"
     print(f"\n{verb} -> {out_file}")

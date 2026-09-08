@@ -6,9 +6,20 @@ Recreated 2026-06-10. The original lived in a Cowork session outputs folder
 and was lost when the session was wiped. This version lives next to the
 scrapers so it survives.
 
+2026-09-07: deck names now come from deck_labels.Resolver rather than from the
+CSV's deck_name column. The share table used to be built on organizer free
+text, so one deck appeared under three names and the tier order was wrong: the
+2026-09-07 snapshot carried 44 labels for 78 players, 27 of them singletons,
+and aliasing alone moved Izzet Spellementals from 6.4% and fifth to 10.3% and
+first. A result whose decklist isn't cached is now dropped rather than counted
+under whatever the organizer typed.
+
 Reads:
   melee_all_standings.csv  (player/deck/rank per round, built by melee_scraper.py)
   set_releases.json        (current set name + release date)
+  melee_deck_cache.json    (cards per decklist URL, via deck_labels)
+  archetype_refs.json      (classification references, via deck_labels)
+  archetype_overrides.json (human rulings, via deck_labels)
 
 Writes:
   baselines/meta_baseline_<set_slug>.json — appends one entry to snapshots[]
@@ -58,6 +69,7 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 import mtg_era  # noqa: E402  (needs SCRIPT_DIR on sys.path first)
+import deck_labels  # noqa: E402
 # Data is read from MTG_DATA_DIR (defaults to the script folder so the flat
 # single-format workflow is unchanged). setup.py points it at a per-format folder.
 DATA_DIR = os.environ.get("MTG_DATA_DIR", SCRIPT_DIR)
@@ -77,7 +89,9 @@ STANDINGS = os.path.join(DATA_DIR, f"melee_{_FMT_SLUG}_all_standings.csv")
 SET_RELEASES = _find_config("set_releases.json")
 BASELINE_DIR = os.path.join(DATA_DIR, "baselines")
 
-JUNK_DECKS = {"", "decklist", "unknown", "deck", "n/a", "-", "—"}
+# Kept as a re-export: the junk-name filter now lives at the point of
+# resolution, so it applies to organizer text wherever it's read from.
+JUNK_DECKS = deck_labels.JUNK_DECKS
 
 
 def slugify(name):
@@ -119,7 +133,19 @@ def _num(val):
         return -1.0
 
 
-def build_snapshot(rows, snap_date, label):
+def build_snapshot(rows, snap_date, label, resolver=None):
+    """
+    One meta-share snapshot from the standings rows.
+
+    Deck names come from `deck_labels.Resolver`, not from the CSV's `deck_name`
+    column, so the share table speaks the same vocabulary as the classifier and
+    the archetype notes. A player whose decklist isn't cached leaves the sample
+    entirely — see the module docstring in deck_labels.py for why.
+
+    `resolver` is injectable so a test can drive it without a data folder.
+    """
+    resolver = resolver if resolver is not None else deck_labels.Resolver(DATA_DIR)
+
     # Final standings row per (tournament, player) = the max-points row
     final = {}        # (tid, player) -> row
     tournaments = {}  # tid -> name
@@ -134,18 +160,23 @@ def build_snapshot(rows, snap_date, label):
         if key not in final or _num(r.get("points")) > _num(final[key].get("points")):
             final[key] = r
 
-    # Aggregate by archetype
+    # Aggregate by resolved archetype
     archetypes = {}
-    for key, r in final.items():
-        deck = re.sub(r"\s+", " ", (r.get("deck_name") or "")).strip()
-        if deck.lower() in JUNK_DECKS:
+    counted_events = set()
+    for (tid, _player), r in final.items():
+        typed = re.sub(r"\s+", " ", (r.get("deck_name") or "")).strip()
+        resolved = resolver.resolve(r.get("deck_url"), typed)
+        if resolved.name is None:
             continue
         rank_raw = (r.get("rank") or "").strip()
         in_top8 = rank_raw.isdigit() and 1 <= int(rank_raw) <= 8
-        a = archetypes.setdefault(deck, {"player_count": 0, "top8_appearances": 0})
+        a = archetypes.setdefault(resolved.name, {
+            "player_count": 0, "top8_appearances": 0, "by_source": {}})
         a["player_count"] += 1
+        a["by_source"][resolved.source] = a["by_source"].get(resolved.source, 0) + 1
         if in_top8:
             a["top8_appearances"] += 1
+        counted_events.add(tid)
 
     total = sum(a["player_count"] for a in archetypes.values())
     for a in archetypes.values():
@@ -154,10 +185,16 @@ def build_snapshot(rows, snap_date, label):
     return {
         "date": snap_date,
         "label": label,
-        "events_covered": len(tournaments),
+        # Events that contributed a counted player, not every event in the CSV.
+        # An event whose decklists are all uncached contributes nothing and
+        # should not inflate the coverage this snapshot claims.
+        "events_covered": len(counted_events),
+        "events_in_pool": len(tournaments),
+        "event_ids": sorted(counted_events),
         "total_players_with_deck": total,
+        "label_provenance": resolver.provenance(),
         "archetypes": dict(sorted(archetypes.items())),
-    }, tournaments
+    }, tournaments, resolver
 
 
 def week_monday(d):
@@ -180,6 +217,10 @@ def write_weekly_md(md_dir, snap, baseline, set_name, era=None):
 
     snaps = baseline.get("snapshots", [])
     prev = snaps[-2] if len(snaps) >= 2 else None
+    # A delta is only honest when both snapshots describe the same kind of
+    # pool. When they don't, the column says why instead of printing a number
+    # nobody can act on.
+    comparable, why_not = deck_labels.delta_is_honest(prev, snap)
 
     lines = []
     if not os.path.exists(path):
@@ -200,25 +241,42 @@ def write_weekly_md(md_dir, snap, baseline, set_name, era=None):
             "One section per scrape run; share deltas are vs the previous run in this era.",
         ]
 
+    prov = snap.get("label_provenance") or {}
+    dropped = (prov.get("dropped_no_decklist", 0) + prov.get("dropped_no_deck_url", 0)
+               + prov.get("dropped_unnamed", 0))
+
     top = sorted(snap["archetypes"].items(), key=lambda kv: -kv[1]["player_count"])[:12]
     lines += [
         "",
         f"## {snap['date']} ({snap['label']})",
         "",
-        f"Events: {snap['events_covered']} | players with deck: {snap['total_players_with_deck']}",
+        f"Events: {snap['events_covered']} of {snap.get('events_in_pool', snap['events_covered'])} "
+        f"in the pool | players counted: {snap['total_players_with_deck']}",
         "",
-        "| Archetype | Players | Share | vs prev | Top 8 |",
-        "|---|---|---|---|---|",
+        f"Labels: {prov.get('classifier', 0)} from the classifier, "
+        f"{prov.get('override', 0)} from a ruling, "
+        f"{prov.get('organizer', 0)} from organizer text. "
+        f"{dropped} result(s) dropped for having no cached decklist.",
+    ]
+    if not comparable:
+        lines += ["", f"No share deltas this run: {why_not}."]
+    lines += [
+        "",
+        "| Archetype | Players | Share | vs prev | Top 8 | Label source |",
+        "|---|---|---|---|---|---|",
     ]
     for name, a in top:
-        if prev is None:
-            delta = ""
+        if not comparable:
+            delta = "n/a"
         elif name in prev.get("archetypes", {}):
             d = a["meta_share_pct"] - prev["archetypes"][name]["meta_share_pct"]
             delta = f"{d:+.1f}"
         else:
             delta = "new"
-        lines.append(f"| {name} | {a['player_count']} | {a['meta_share_pct']}% | {delta} | {a['top8_appearances']} |")
+        by = a.get("by_source") or {}
+        src = ", ".join(f"{k} {v}" for k, v in sorted(by.items())) or "-"
+        lines.append(f"| {name} | {a['player_count']} | {a['meta_share_pct']}% | "
+                     f"{delta} | {a['top8_appearances']} | {src} |")
 
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
@@ -288,14 +346,23 @@ def main():
     baseline_path = os.path.join(BASELINE_DIR, f"meta_baseline_{era['slug']}.json")
 
     rows = load_standings()
-    snap, tournaments = build_snapshot(rows, args.date, args.label)
+    snap, tournaments, resolver = build_snapshot(rows, args.date, args.label)
     snap["era"] = era["slug"]
     snap["era_start"] = era["start_str"]
 
     print(f"Set: {cs['name']} (released {cs['release_date']})")
     print(f"Era: {era['label']} — data from {era['start_str']} onward")
-    print(f"Standings rows: {len(rows)} | events: {snap['events_covered']} | "
-          f"players with deck: {snap['total_players_with_deck']}")
+    print(f"Standings rows: {len(rows)} | events contributing: "
+          f"{snap['events_covered']} of {snap['events_in_pool']} | "
+          f"players counted: {snap['total_players_with_deck']}")
+    for line in resolver.report_lines():
+        print(line)
+
+    if snap["total_players_with_deck"] == 0:
+        print("\nNo result had a cached decklist, so there is nothing to snapshot.")
+        print("  Run:  python melee_scraper.py   (then re-run this)")
+        sys.exit(2)
+
     top = sorted(snap["archetypes"].items(), key=lambda kv: -kv[1]["player_count"])[:10]
     for name, a in top:
         print(f"  {name:30s} {a['player_count']:4d} players  "

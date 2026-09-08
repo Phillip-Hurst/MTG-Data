@@ -11,6 +11,8 @@ scrape. (Earlier versions carried a fixed May-12 write-up; that was removed
 import csv, os, glob, collections, re, json, sys
 from datetime import datetime
 
+import combine_events
+import deck_labels
 from mtg_stats import classify_row, win_pct
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
@@ -26,6 +28,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # single-format workflow is unchanged). setup.py sets it per format.
 DATA_DIR = os.environ.get("MTG_DATA_DIR", SCRIPT_DIR)
 FORMAT = os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard"
+FMT_SLUG = FORMAT.lower()
 
 
 def _find_config(name):
@@ -74,12 +77,19 @@ NAME_TO_FILENAME = {
 # ── Load pairings ──────────────────────────────────────────────────────────
 
 def load_pairings():
-    rows = []
-    for p in glob.glob(os.path.join(DATA_DIR, "melee_*_pairings.csv")):
-        if os.path.basename(p).endswith("_all_pairings.csv"):
-            continue
-        with open(p, encoding="utf-8") as f:
-            rows.extend(list(csv.DictReader(f)))
+    """
+    The validated pairing pool, through the one loader.
+
+    This wrote matchup tables into the archetype notes off a per-event glob,
+    which skipped the seat filter and read a different pool from the one
+    build_baseline.py reports meta share on. The notes are the most durable
+    output the skill has, so a wrong pool here outlives the run that made it.
+    """
+    rows, summary = combine_events.load_pool(DATA_DIR, FMT_SLUG, "pairings",
+                                            resolve_names=True)
+    print(f"  Pool: {combine_events.describe_pool(summary)}")
+    for line in deck_labels.pairing_report_lines(summary["label_stats"]):
+        print(line)
     return rows
 
 def compute(rows):

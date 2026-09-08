@@ -4,6 +4,8 @@ mtgo_*.csv
 mtgo_*.json
 archetype_refs.json
 melee_deck_cache.json
+# Derived pool description, rebuilt by combine_events.py from local scrapes.
+melee_*_all_coverage.json
 mtgo_classifications.json
 
 # Baselines — user-specific snapshots
@@ -17,7 +19,12 @@ baselines/
 card_pool_*.json
 event_quarantine_*.json
 archetype_overrides.json
-archetype_refs.pre-alias.json
+# Pre-change snapshots the migration scripts drop beside the file they rewrite.
+# archetype_refs.pre-alias.json was listed by name on 2026-08-29 and then four
+# more appeared (pre-naming, pre-merge-fix, pre-pipeline, pre-4cc-split) plus a
+# 256 KB melee_deck_cache one. They are backups of files that are themselves
+# ignored, so the pattern is what belongs here, not another filename.
+*.pre-*.json
 *.quarantined.csv
 *.raw.csv
 

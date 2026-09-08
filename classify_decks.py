@@ -39,6 +39,11 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 SCRIPT_DIR    = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+
+import refs_store  # noqa: E402  (needs SCRIPT_DIR on the path first)
+import classifier  # noqa: E402
+
 # Data is read from MTG_DATA_DIR (defaults to the script folder so the flat
 # single-format workflow is unchanged). setup.py sets it per format.
 DATA_DIR     = os.environ.get("MTG_DATA_DIR", SCRIPT_DIR)
@@ -66,27 +71,23 @@ CHALLENGE_POINTS = {
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def load_refs():
-    if not os.path.exists(REFS_FILE):
-        return {}
-    with open(REFS_FILE, encoding="utf-8") as f:
-        data = json.load(f)
-    return data.get("archetypes", {})
+    return refs_store.load(REFS_FILE)
 
 
-def save_refs(archetypes):
-    existing = {}
-    if os.path.exists(REFS_FILE):
-        with open(REFS_FILE, encoding="utf-8") as f:
-            existing = json.load(f)
-    existing["archetypes"] = archetypes
-    existing.setdefault("_note",
-        "Reference mainboard lists for archetype classification. "
-        "Each entry: {mainboard: {card: count}, notes: str}. "
-        "Populated by classify_decks.py --apply-reviews or --build-refs.")
-    existing.setdefault("_schema_version", 1)
-    with open(REFS_FILE, "w", encoding="utf-8") as f:
-        json.dump(existing, f, indent=2, ensure_ascii=False)
-    print(f"archetype_refs.json updated: {len(archetypes)} archetypes")
+def save_refs(archetypes, source="mtgo-classifications", replace=False):
+    """
+    Merge into the reference file rather than replacing it.
+
+    --build-refs only sees archetypes with confirmed MTGO classifications, so
+    replacing wiped every reference built from melee or seeded from mtgtop8.
+    refs_store keeps those and only overwrites a label when this run has at
+    least as many decklists behind it.
+    """
+    return refs_store.save(REFS_FILE, archetypes, source=source, replace=replace,
+                           thresholds={
+                               "confident_slots": CONFIDENT_SLOTS,
+                               "uncertain_slots": UNCERTAIN_SLOTS,
+                           })
 
 
 def load_events(*json_paths):
@@ -168,6 +169,11 @@ def classify(deck_main, refs):
         ref_mb = ref.get("mainboard", {})
         if not ref_mb:
             continue
+        # A reference can name cards a deck must play to be eligible at all.
+        # See refs_store.eligible: slot overlap can't tell three-colour Jeskai
+        # from four-colour Jeskai Tablet, but Inevitable Defeat can.
+        if not refs_store.eligible(deck_main, ref):
+            continue
         score = match_score(deck_main, ref_mb)
         scores[name] = (score, score / ref_total(ref_mb))
 
@@ -232,16 +238,49 @@ def deck_uid(event, deck):
 
 # ─── Review queue generation ──────────────────────────────────────────────────
 
+QUEUE_NAME = "[C] MTGO Review Queue.md"
+FIRST_SEEN_RE = re.compile(r"^first_seen:\s*(\S+)", re.MULTILINE)
+UID_RE = re.compile(r"^deck_uid:\s*(\S+)", re.MULTILINE)
+
+
+def _previous_first_seen(path):
+    """When each deck currently in the queue first landed there."""
+    if not os.path.exists(path):
+        return {}
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        return {}
+    seen = {}
+    for block in text.split("\n## Deck ")[1:]:
+        u = UID_RE.search(block)
+        d = FIRST_SEEN_RE.search(block)
+        if u:
+            seen[u.group(1)] = d.group(1) if d else None
+    return seen
+
+
 def write_review_queue(to_review, run_date_str):
     """
-    Write a markdown file listing decks that need manual archetype classification.
-    to_review: list of dicts with keys: uid, event_name, event_date, place, player,
-               mainboard, sideboard, best_match, best_score, best_ratio, status
+    One rolling queue, not one note per run.
+
+    The old writer stamped the date into the filename, so every run left a new
+    500-900 entry note behind and nothing ever left. Three of them were on disk
+    at 770 KB, and a deck resolved weeks ago was still sitting in two of them.
+    A queue you can't finish isn't a queue.
+
+    Now: one file, rewritten each run from what is currently unresolved.
+    Resolved decks drop out on their own. Each entry carries `first_seen`, so a
+    deck that has been sitting there for three weeks is visible as such, and the
+    summary leads with the reasons rather than the total — the reason is what
+    tells you which lever to pull.
     """
-    path = os.path.join(
-        _PROJECT_DIR,
-        f"[C] MTGO Review Queue {run_date_str}.md"
-    )
+    path = os.path.join(_PROJECT_DIR, QUEUE_NAME)
+    previously = _previous_first_seen(path)
+    resolved = [u for u in previously if u not in {d.get("uid") for d in to_review}]
+
+    by_reason = Counter(d.get("reason", "?") for d in to_review)
+    carried = sum(1 for d in to_review if previously.get(d.get("uid")))
 
     lines = [
         "---",
@@ -252,7 +291,32 @@ def write_review_queue(to_review, run_date_str):
         "tags: [mtg, mtgo, review-queue]",
         "---",
         "",
-        f"# MTGO classification review queue, {run_date_str}",
+        "# MTGO classification review queue",
+        "",
+        f"Rewritten {run_date_str} from what's still unresolved. One file, not one",
+        "per run: resolved decks drop out by themselves, and `first_seen` shows how",
+        "long anything has been sitting.",
+        "",
+        f"**{len(to_review)} open** — {carried} carried over, "
+        f"{len(to_review) - carried} new, {len(resolved)} resolved since last run.",
+        "",
+        "Before working through these one by one, check the reason split. Most",
+        "queues are a handful of missing categories, not hundreds of judgements:",
+        "",
+    ]
+    fixes = {
+        "coverage": "no reference is close. Run `cluster_shells.py` — these are "
+                    "usually a few unnamed decks, not many brews",
+        "containment": "the reference explains too little of the deck. It's thin; "
+                       "feed it more decklists",
+        "margin": "two references are too close. Separate them with a "
+                  "requires/excludes gate, or alias them together",
+        "no eligible reference": "every reference is gated out. Check the "
+                                 "requires/excludes lists",
+    }
+    for why, n in by_reason.most_common():
+        lines.append(f"- **{n} × {why}** — {fixes.get(why, '')}")
+    lines += [
         "",
         "Fill in `archetype:` for each deck below.",
         "",
@@ -267,19 +331,32 @@ def write_review_queue(to_review, run_date_str):
         "",
     ]
 
+    # Longest-waiting first. A deck that has survived three runs is either a
+    # real archetype nobody has named or a bad record, and both want attention
+    # before today's fresh arrivals.
+    to_review = sorted(
+        to_review,
+        key=lambda d: (previously.get(d.get("uid")) or run_date_str, d.get("reason", "")))
+
     for i, d in enumerate(to_review, 1):
         total_main = sum(d.get("mainboard", {}).values())
         total_side = sum(d.get("sideboard", {}).values())
+        first_seen = previously.get(d.get("uid")) or run_date_str
+
         hint = ""
-        if d.get("best_match") and d.get("status") == "uncertain":
-            hint = (f"  (closest match: {d['best_match']}, "
-                    f"{d['best_score']}/{int(d['best_ratio']*60+0.5)} slots, "
-                    f"{d['best_ratio']*100:.0f}%)")
+        if d.get("best_match"):
+            hint = (f"  (closest: {d['best_match']} — coverage "
+                    f"{d.get('coverage', 0):.0%}, containment "
+                    f"{d.get('containment', 0):.0%}, {d.get('best_score', 0)} slots"
+                    + (f"; runner-up {d['runner_up']}" if d.get("runner_up") else "")
+                    + ")")
 
         lines += [
             f"## Deck {i} | player: {d.get('player','')} | place: {d.get('place','')} | "
             f"event: {d.get('event_name','')} {d.get('event_date','')}",
             f"deck_uid: {d.get('uid','')}",
+            f"first_seen: {first_seen}",
+            f"queued_because: {d.get('reason','?')}",
             "",
             f"archetype: {hint}",
             "",
@@ -303,8 +380,9 @@ def write_review_queue(to_review, run_date_str):
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-    print(f"Review queue written: {os.path.basename(path)}")
-    print(f"  {len(to_review)} decks need attention")
+    print(f"Review queue: {os.path.basename(path)}")
+    print(f"  {len(to_review)} open ({carried} carried over, "
+          f"{len(to_review) - carried} new), {len(resolved)} resolved since last run")
     return path
 
 
@@ -509,6 +587,7 @@ def run_classify(events, refs, classifications, rerun=False):
     new_uncertain = 0   # uncertain/unmatched with refs present
     new_no_refs = 0     # no refs yet
     no_cards = 0        # no card data in source
+    reasons = Counter() # why each queued deck was queued
 
     for event in events:
         event_name = event.get("name", "")
@@ -542,7 +621,10 @@ def run_classify(events, refs, classifications, rerun=False):
                 })
                 continue
 
-            best_arch, best_score, best_ratio, all_scores = classify(main, refs)
+            verdict = classifier.classify(main, refs)
+            best_arch   = verdict.archetype
+            best_score  = verdict.matched
+            best_ratio  = verdict.coverage
 
             if not refs:
                 # No refs yet — everything goes to review
@@ -563,11 +645,10 @@ def run_classify(events, refs, classifications, rerun=False):
                 continue
 
             matched_slots = best_score
-            status = (
-                "confident" if matched_slots >= CONFIDENT_SLOTS else
-                "uncertain" if matched_slots >= UNCERTAIN_SLOTS else
-                "unmatched"
-            )
+            # The verdict decides, not a raw slot count. A reference summing to
+            # 36 slots can never reach 45, so the old rule queued every deck of
+            # that archetype forever. classifier scores in coverage instead.
+            status = verdict.status
 
             if status == "confident":
                 ref_mb = refs[best_arch].get("mainboard", {})
@@ -603,8 +684,12 @@ def run_classify(events, refs, classifications, rerun=False):
                           + " | ".join(diverge_note))
 
             else:
-                # uncertain or unmatched -> review queue
+                # uncertain or unmatched -> review queue.
+                # `reason` is the point of this record. A queue entry that
+                # doesn't say why it's there can't be acted on, and that is how
+                # a queue turns into a pile.
                 new_uncertain += 1
+                reasons[verdict.reason] += 1
                 to_review.append({
                     "uid": uid,
                     "event_name": event_name,
@@ -614,9 +699,19 @@ def run_classify(events, refs, classifications, rerun=False):
                     "mainboard": main,
                     "sideboard": side,
                     "status": status,
+                    "reason": verdict.reason,
                     "best_match": best_arch,
                     "best_score": matched_slots,
                     "best_ratio": best_ratio,
+                    "coverage": round(verdict.coverage, 3),
+                    "containment": round(verdict.containment, 3),
+                    "margin": round(verdict.margin, 3),
+                    "runner_up": verdict.runner_up,
+                    "candidates": [
+                        {"archetype": c.archetype, "matched": c.matched,
+                         "coverage": round(c.coverage, 3)}
+                        for c in verdict.candidates[:3]
+                    ],
                 })
 
     print(f"\nClassification summary:")
@@ -628,6 +723,18 @@ def run_classify(events, refs, classifications, rerun=False):
         print(f"    - uncertain / unmatched   : {new_uncertain}")
     if no_cards:
         print(f"    - no card data            : {no_cards}")
+    if reasons:
+        # Each reason maps to a different fix, so the split is the actionable
+        # part of this summary, not the total.
+        print("\n  Why they're queued, and what fixes each:")
+        fixes = {
+            "coverage":    "no reference is close — this archetype needs one",
+            "containment": "the reference explains too little of the deck — feed it more lists",
+            "margin":      "two references are too close — merge them, or add a requires/signature",
+            "no eligible reference": "every reference is gated out — check the requires lists",
+        }
+        for why, n in reasons.most_common():
+            print(f"    {n:5d}  {why:14} {fixes.get(why, '')}")
 
     return to_review
 
@@ -661,15 +768,21 @@ def apply_reviews(review_path, refs, classifications):
             continue
 
         # Merge with existing ref if present (existing data + new data, take modal)
+        prior = refs.get(arch_clean) or {}
+        prior_decks = refs_store.decks_behind(prior)
         if arch_clean in refs:
             # Combine: existing ref cards + new deck cards, recompute modal
             combined = list(decks)
-            combined.append({"mainboard": refs[arch_clean].get("mainboard", {})})
+            combined.append({"mainboard": prior.get("mainboard", {})})
             new_ref = build_ref_from_decks(combined)
 
-        refs[arch_clean] = refs.get(arch_clean, {})
-        refs[arch_clean]["mainboard"] = new_ref
-        refs[arch_clean].setdefault("notes", "")
+        total_decks = prior_decks + len(decks)
+        entry = dict(prior)
+        entry["mainboard"] = new_ref
+        entry["notes"] = f"Built from {total_decks} decklists (reviewed)"
+        entry["decks"] = total_decks
+        entry["source"] = "mtgo-reviews"
+        refs[arch_clean] = entry
 
         # Update classifications for these reviewed decks
         for r in decks:
@@ -718,7 +831,12 @@ def rebuild_all_refs(events, classifications):
     for arch, decks in sorted(arch_decks.items()):
         new_ref = build_ref_from_decks(decks)
         if new_ref:
-            refs[arch] = {"mainboard": new_ref, "notes": f"Built from {len(decks)} decklists"}
+            refs[arch] = refs_store.make_entry(
+                new_ref,
+                notes=f"Built from {len(decks)} decklists",
+                decks=len(decks),
+                source="mtgo-classifications",
+            )
             print(f"  {arch}: {len(new_ref)} core cards from {len(decks)} lists")
 
     return refs
@@ -765,7 +883,13 @@ def parse_args():
     p.add_argument("--apply-reviews", metavar="PATH",
                    help="Read annotated review queue file, update refs + classifications")
     p.add_argument("--build-refs", action="store_true",
-                   help="Rebuild archetype references from all confirmed classifications")
+                   help="Rebuild archetype references from all confirmed classifications. "
+                        "Merges into the existing set; references this run can't rebuild "
+                        "are left alone")
+    p.add_argument("--replace-refs", action="store_true",
+                   help="With --build-refs, discard every existing reference and keep only "
+                        "what this run built. Backs up to archetype_refs.pre-replace.json. "
+                        "A reset, not a rebuild")
     p.add_argument("--score-challenges", action="store_true",
                    help="Print archetype point totals from challenge data")
     p.add_argument("--analyze-5-0", nargs="?", const="ALL", metavar="ARCHETYPE",
@@ -800,14 +924,14 @@ def main():
             print(f"ERROR: review file not found: {path}")
             sys.exit(1)
         refs, classifications = apply_reviews(path, refs, classifications)
-        save_refs(refs)
+        save_refs(refs, source="mtgo-reviews")
         save_classifications(classifications)
         print("Done. Run classify again to process any remaining unclassified decks.")
         return
 
     if args.build_refs:
         refs = rebuild_all_refs(events, classifications)
-        save_refs(refs)
+        save_refs(refs, replace=args.replace_refs)
         return
 
     # Default: classify

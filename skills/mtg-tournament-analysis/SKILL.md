@@ -36,6 +36,19 @@ and point at `validate_events.py` rather than reporting the number as fact. On
 of a "post-ban" metagame, 17 days after it was banned out of the format. Nothing
 errored.
 
+**Then read `melee_<fmt>_all_coverage.json`, which says what the pool actually
+is.** `combine_events.py` writes it beside the combined CSVs: events kept, events
+quarantined, events carrying no verdict, and files that could not be read. Report
+the event count from there rather than from the number of CSVs in the folder.
+An event with no verdict is in the pool and unjudged, and that is worth a
+sentence. A file that could not be read means the rebuild refused and the pool
+you are reading is the previous one, which is worth more than a sentence.
+
+**Never edit the combined CSVs.** They are derived. Anything that looks wrong in
+them is wrong in a per-event file or in a verdict, and `python combine_events.py`
+rebuilds them from those. Before 2026-09-08 the combined files were filtered in
+place and lost rows on every run.
+
 ---
 
 ## Card-level signal
@@ -43,9 +56,11 @@ errored.
 Step 3.5 below covers how to *write* about a card once you've found it. `card_signal.py` is how you find it. Run it before writing the "Cards to watch" section — that section should come out of this, not out of impressions.
 
 ```bash
-python card_signal.py                       # all four lenses, current era
+python card_signal.py                       # all five lenses, current era
 python card_signal.py --lens rogue          # just the deckbuilding shortlist
+python card_signal.py --lens adoption --board side   # what the field is boarding
 python card_signal.py --archetype "Mono-Green"   # deviations in one deck
+python card_signal.py --archetype "Dimir Midrange" --lens adoption
 python card_signal.py --write               # save a note
 ```
 
@@ -54,6 +69,14 @@ python card_signal.py --write               # save a note
 **deviation** — cards in an archetype's lists that aren't in its goto build, ranked by how much better those pilots finished than the rest of the archetype. This is the caster's read made countable: *"we don't see Slickshot Show-Off from Tony's build."* A card filling a flex slot isn't signal; a card several pilots independently reach for, who then beat their own archetype's average, is.
 
 **trend** — adoption moving across the window. A block of cards moving together is one deck moving, not eight discoveries; the outlier moving the other way is usually the better line.
+
+**adoption** — share of maindecks, sideboards or 75s carrying a card, week by week, with the card's colour and type beside it. This is the lens that catches the field adapting: a field answers a deck from its sideboard first and its maindeck weeks later, if ever, and `trend`'s half-window split flattens exactly that shape. Spell Snare going 8.4% to 18.1% of sideboards across 4 weeks is the format deciding something about two-drops. Two cards moving opposite ways in the same colour is usually one swap rather than two decisions.
+
+Add `--archetype` to switch to average copies in that deck's 75, which is what a deliberate hedge looks like: Dimir Midrange went 1.5 to 2.3 Flashfreeze over the same window, 30 pilots independently reaching for the same answer to red and green.
+
+Weeks under 12 decks are dropped and named, and so are decks with no date. **This lens reads MTGO only.** The melee cache holds 393 more lists with sideboards and no event dates, so they can't be put in a week; say that rather than implying the sideboard picture covers the whole field.
+
+**Sideboards are reported, never scored.** Classification still reads mainboards only, measured and settled 2026-09-07: two red decks staring at the same field board the same 6 cards, so scoring on sideboard overlap blurs more archetype pairs than it sharpens.
 
 **unnamed** — shells the classifier can't name, grouped by co-occurrence, each a real deck with a real record and no label. Report them as exactly that and hand them to `deck-check`. Don't invent a name here.
 
@@ -328,13 +351,33 @@ The scraper produces two CSVs:
 **`melee_<format>_all_standings.csv`** — one row per player per round:
 `tournament_id, tournament_name, round, rank, player, deck_name, deck_url, match_record, game_record, points, omw_pct, tgw_pct, ogw_pct`
 
-To build the matchup matrix from pairings CSV:
-1. Use `player1_deck` and `player2_deck` as archetype labels (normalize similar names to one canonical label — e.g. "Mono-Green Landfall" and "Mono Green Landfall" → same deck)
-2. For each unique deck-pair (A vs B), count wins for each side
-3. Only report a matchup cell when n ≥ 10 matches (matches `MIN_MATCHUP_GAMES` in the scripts); use "—" below that threshold
-4. Express as win% from Deck A's perspective: `A wins / (A wins + B wins)`
+To build the matchup matrix, run `python matchup_matrix.py`. It reads the
+validated pool through `combine_events.load_pool` and names every deck through
+`deck_labels`, so the matrix speaks the same vocabulary as the meta-share table
+instead of whatever each organizer typed. It prints the pool line and the label
+provenance first; pass both on rather than skipping to the grid.
 
-If `player1_deck` is blank for a match, try fetching `player1_deck_url` from melee.gg Decklist/View to get the archetype name from the decklist title.
+What the numbers mean:
+
+1. Deck labels come from `deck_labels`: override, then a confident classifier
+   verdict off the cached list, then the organizer's aliased text. The run
+   reports how many seats came from each, and **a matrix built mostly on
+   organizer text should say so in the write-up.**
+2. A cell needs n ≥ 10 decided games (`MIN_MATCHUP_GAMES`); below that it prints
+   as a dot and should be reported as absent rather than as a small number.
+3. Win% is from the row deck's perspective, over decided games. Draws are
+   excluded from the denominator and byes are dropped entirely.
+
+**Say how few cells there are.** Melee is the only source of round data (MTGO
+publishes no pairings), and on the 2026-09-08 pool exactly 14 pairs cleared the
+10-match floor. That is a short list of specific matchups. Print the list with
+its counts and name what's missing; a grid of dots presented as a matrix is
+worse than a paragraph naming the four matchups you can actually stand behind.
+
+**A blank deck name usually can't be recovered.** 775 of the 783 unnamed seats
+carry no `deck_url` either, so there is nothing to look them up by. Don't spend
+the session fetching Decklist/View pages for them; it's a scraper gap, and the 8
+seats that do have a URL are already resolved automatically.
 
 ### Matchup data sources — in priority order
 

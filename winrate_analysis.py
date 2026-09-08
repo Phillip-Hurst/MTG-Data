@@ -1,20 +1,27 @@
 """
-Comprehensive win-rate analysis across ALL scraped melee.gg tournaments.
+Comprehensive win-rate analysis across the validated melee.gg pool.
 
-Reads every per-tournament melee_*_pairings.csv in MTG_DATA_DIR (skipping the
-combined *_all_pairings.csv), filters out byes / draft / no-deck rounds, computes:
+Reads the pool through combine_events (which rebuilds it from the per-event
+files with the quarantine's verdicts and the seat filter applied), resolves
+every deck name through deck_labels, filters out byes / draft / no-deck rounds,
+then computes:
   - per-archetype appearance count + win rate (min 10 games), draws excluded
   - head-to-head matchup win rates (min 10 decided games)
 
-Also rebuilds melee_<format>_all_pairings.csv as a concatenation of the
-per-tournament files for this format.
-
 Writes a markdown report into the vault.
+
+2026-09-08: this module used to glob the per-event CSVs itself and write its
+own version of melee_<format>_all_pairings.csv with no verdict filter, which
+made the combined file's contents depend on run order. It also read deck names
+straight off the CSV row, so it saw organizer text where build_baseline saw
+classifier verdicts. Both are now handled upstream.
 """
 
 import csv, os, glob, collections, sys
 from datetime import datetime
 
+import combine_events
+import deck_labels
 from mtg_stats import classify_row, win_pct
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
@@ -47,29 +54,27 @@ PAIRING_FIELDS = [
     "result", "winner",
 ]
 
-def load_pairings():
-    paths = [p for p in glob.glob(os.path.join(DATA_DIR, "melee_*_pairings.csv"))
-             if not os.path.basename(p).endswith("_all_pairings.csv")]
-    all_rows = []
+def load_pool():
+    """
+    The validated pairing pool, plus a per-tournament breakdown.
+
+    This module used to glob the per-event CSVs itself and then write its own
+    version of melee_<fmt>_all_pairings.csv with no verdict filter, which made
+    the combined file's contents depend on which script ran last. It also meant
+    the win-rate math skipped the seat filter, so a Standard player paired
+    against a Modern player inside a team event counted as a Standard match.
+
+    combine_events owns the pool now. It rebuilds from the per-event files,
+    applies the verdicts and the seat filter, and is the only writer.
+    """
+    rows, summary = combine_events.load_pool(DATA_DIR, FMT_SLUG, "pairings",
+                                            resolve_names=True)
     tournaments = collections.OrderedDict()
-    for p in sorted(paths):
-        with open(p, encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
-        all_rows.extend(rows)
-        if rows:
-            tid = rows[0].get("tournament_id", "")
-            name = rows[0].get("tournament_name", "")
-            tournaments[tid] = (name, len(rows))
-    return all_rows, tournaments, paths
-
-
-def rebuild_all_pairings(rows):
-    out = os.path.join(DATA_DIR, f"melee_{FMT_SLUG}_all_pairings.csv")
-    with open(out, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=PAIRING_FIELDS, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
-    return out
+    for r in rows:
+        tid = (r.get("tournament_id") or "").strip()
+        name, n = tournaments.get(tid, ((r.get("tournament_name") or "").strip(), 0))
+        tournaments[tid] = (name, n + 1)
+    return rows, tournaments, summary
 
 
 def compute_winrates(rows):
@@ -219,20 +224,25 @@ def write_report(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
 
 
 def main():
-    print("Loading pairings...")
-    rows, tournaments, paths = load_pairings()
-    if not paths:
-        print(f"\nNo melee pairing files found in:\n  {DATA_DIR}")
+    print("Loading the validated pairing pool...")
+    rows, tournaments, summary = load_pool()
+    if not rows:
+        print(f"\nNo melee pairing rows in:\n  {DATA_DIR}")
         print("Run the melee scraper first (scrape.bat / scrape.sh, or "
-              "mtg_fetch.py), then try again.")
+              "mtg_fetch.py), then validate_events.py, then try again.")
         return
     os.makedirs(_OUTPUT_DIR, exist_ok=True)
-    print(f"  Loaded {len(rows):,} rows from {len(paths)} tournament files")
+    print(f"  Pool: {combine_events.describe_pool(summary)}")
+    for line in deck_labels.pairing_report_lines(summary["label_stats"]):
+        print(line)
     for tid, (name, n) in tournaments.items():
         print(f"    {tid}  {n:5,}  {name[:60]}")
-
-    out = rebuild_all_pairings(rows)
-    print(f"  Rebuilt {out}")
+    if summary and summary["unjudged_events"]:
+        print(f"\n  {len(summary['unjudged_events'])} event(s) carry no verdict. "
+              "Run validate_events.py before quoting these numbers.")
+    if summary and summary["unreadable_files"]:
+        print(f"  ! {len(summary['unreadable_files'])} per-event file(s) could not "
+              "be read, so those events contributed nothing.")
 
     print("\nComputing win rates...")
     dg, dw, dl, dd, mw = compute_winrates(rows)

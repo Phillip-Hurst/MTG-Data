@@ -34,10 +34,16 @@ Verdicts
 
 Effect
 ------
-Writes event_quarantine.json, then rewrites melee_<fmt>_all_pairings.csv and
-melee_<fmt>_all_standings.csv from the surviving events only. The originals
-are preserved as *.raw.csv. Nothing is deleted; a quarantined event's own
-per-event CSVs stay on disk so a verdict can be reviewed and overridden.
+Writes event_quarantine.json, then hands the verdicts to combine_events, which
+rebuilds melee_<fmt>_all_pairings.csv and melee_<fmt>_all_standings.csv from
+the per-event files with those verdicts applied. The combined files are
+derived: they are never filtered in place, so a bad run is repaired by the next
+rebuild instead of compounding. The previous copies are kept as
+*.pre-rebuild.csv and the resulting pool is described in
+melee_<fmt>_all_coverage.json.
+
+Nothing is deleted; a quarantined event's own per-event CSVs stay on disk under
+*.quarantined.csv so a verdict can be reviewed and overridden.
 
 Usage
 -----
@@ -63,6 +69,7 @@ sys.path.insert(0, SCRIPT_DIR)
 
 from mtg_paths import resolve_data_dir  # noqa: E402
 import build_card_pool  # noqa: E402
+import combine_events  # noqa: E402
 import mtg_era  # noqa: E402
 
 # A deck counts as legal if this share of its distinct mainboard cards sit in
@@ -345,11 +352,17 @@ def quarantine_event_files(data_dir, fmt, verdicts, dry_run=False):
     """
     Hide quarantined events from the per-event glob, and unhide ones that pass.
 
-    Cleaning the combined CSVs is not enough. matchup_matrix.py and
-    winrate_analysis.py glob `melee_*_pairings.csv` and explicitly skip
-    `_all_pairings.csv`, so they read the per-event files directly. Without
-    this, a quarantined event stays invisible to the snapshot and fully visible
-    to the matchup matrix — the worst of both.
+    Cleaning the combined CSVs used not to be enough. matchup_matrix.py,
+    winrate_analysis.py and update_archetypes.py each globbed
+    `melee_*_pairings.csv` and skipped `_all_pairings.csv`, so they read the
+    per-event files directly and a quarantined event stayed invisible to the
+    snapshot and fully visible to the matchup matrix.
+
+    Since 2026-09-08 all three read the pool through combine_events, which
+    applies the verdicts itself, so the rename is no longer the only thing
+    keeping a bad event out. It is kept because it makes the state visible on
+    disk: a file named `.quarantined.csv` says what happened to it without
+    anyone having to open the JSON.
 
     Renaming to `*.quarantined.csv` takes them out of that glob (the pattern
     requires the name to end `_pairings.csv`) without deleting anything.
@@ -393,47 +406,46 @@ def quarantine_event_files(data_dir, fmt, verdicts, dry_run=False):
 
 
 def rewrite_combined(data_dir, fmt, verdicts, dry_run=False):
-    """Rebuild the combined CSVs from surviving events. Keeps a .raw.csv copy."""
-    drop = {v["tournament_id"] for v in verdicts
-             if v["verdict"] in ("off-format", "pre-era", "variant")}
-    seats = {v["tournament_id"]: set(v.get("keep_players", []))
-             for v in verdicts if v["verdict"] == "seat"}
+    """
+    Rebuild the combined CSVs from the per-event files, verdicts applied.
+
+    Delegates to combine_events, which is now the only writer of these files.
+
+    This used to read the combined CSV, filter it, and write it back over
+    itself, so every run filtered an already-filtered file. Rows could leave
+    and could never come back: melee_standard_all_standings.csv went 553 rows
+    in August to 312 to 241 while 27 per-event files sat on disk. The .raw.csv
+    backup was guarded by `if not os.path.isfile(raw)`, so it froze on the
+    first run and was 11 days stale by 2026-09-08.
+
+    Two other scripts rebuilt the same files from the per-event glob with no
+    verdict filter, so which rows a consumer saw depended on run order while
+    the quarantine file stayed dated, in-era and post-scrape either way. All
+    three now go through combine_events.rebuild_all.
+    """
+    verdict_map = {str(v.get("tournament_id") or "").strip(): v
+                   for v in verdicts if v.get("tournament_id")}
+    summaries = combine_events.rebuild_all(data_dir, fmt, verdicts=verdict_map,
+                                           dry_run=dry_run, quiet=True)
     summary = {}
     for kind in ("pairings", "standings"):
-        path = os.path.join(data_dir, f"melee_{fmt.lower()}_all_{kind}.csv")
-        if not os.path.isfile(path):
-            continue
-        rows = read_csv(path)
-        if not rows:
-            continue
-        kept = []
-        for r in rows:
-            tid = (r.get("tournament_id") or "").strip()
-            if tid in drop:
-                continue
-            if tid in seats:
-                keep = seats[tid]
-                if kind == "pairings":
-                    p1 = (r.get("player1") or "").strip()
-                    p2 = (r.get("player2") or "").strip()
-                    # Both seats must be in-format; a cross-format pairing means
-                    # the labelling is wrong, not that the match happened.
-                    if p1 not in keep or (p2 and p2 not in keep):
-                        continue
-                else:
-                    if (r.get("player") or "").strip() not in keep:
-                        continue
-            kept.append(r)
-        summary[kind] = {"before": len(rows), "after": len(kept), "removed": len(rows) - len(kept)}
-        if dry_run:
-            continue
-        raw = path.replace(".csv", ".raw.csv")
-        if not os.path.isfile(raw):
-            shutil.copy2(path, raw)
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-            w.writeheader()
-            w.writerows(kept)
+        s = summaries[kind]
+        # "before" is what the per-event files offered this run, not what the
+        # file happened to hold last time. That makes the removed count mean
+        # the same thing on every run.
+        summary[kind] = {
+            "before": s["rows_available"],
+            "after": s["rows"],
+            "removed": s["rows_dropped_by_verdict"] + s["rows_seat_trimmed"],
+            "events_in_folder": s["events_in"],
+            "events_kept": s["events_kept"],
+            "dropped_by_verdict": s["dropped_by_verdict"],
+            "unjudged_events": sorted(s["unjudged_events"]),
+            "previous_rows": s["previous_rows"],
+        }
+        for name, err in s["unreadable_files"]:
+            if (name, err) not in UNREADABLE:
+                UNREADABLE.append((name, err))
     return summary
 
 
@@ -853,7 +865,9 @@ def main():
         print("\n--dry-run: nothing written.")
     else:
         print(f"  Report: {out}")
-        print(f"  Originals preserved as melee_{fmt.lower()}_all_*.raw.csv")
+        print(f"  Previous combined files kept as "
+              f"melee_{fmt.lower()}_all_*.pre-rebuild.csv")
+        print(f"  Pool coverage written to melee_{fmt.lower()}_all_coverage.json")
 
     if bad or seats:
         print(f"\n{len(bad)} event(s) quarantined, {len(seats)} salvaged as a single seat.")

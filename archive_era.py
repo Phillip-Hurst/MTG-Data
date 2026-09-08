@@ -57,6 +57,18 @@ DATA_DIR = os.environ.get("MTG_DATA_DIR", SCRIPT_DIR)
 MOVE_GLOBS = [
     "melee_*_pairings.csv",
     "melee_*_standings.csv",
+    # Quarantined events are renamed rather than deleted, and combine_events
+    # reads them so a reversed verdict can put one back. Left behind at a ban
+    # they'd sit in the new era's folder with no verdict, which counts as
+    # unjudged, which means kept.
+    "melee_*_pairings.quarantined.csv",
+    "melee_*_standings.quarantined.csv",
+    # Derived files. The rebuild backup and the coverage sidecar both describe
+    # the closing era's pool, so leaving them would have them describe the new
+    # one.
+    "melee_*_all_pairings.pre-rebuild.csv",
+    "melee_*_all_standings.pre-rebuild.csv",
+    "melee_*_all_coverage.json",
 ]
 MOVE_FILES = [
     "mtgo_5-0_latest.json",

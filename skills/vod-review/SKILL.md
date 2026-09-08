@@ -624,6 +624,24 @@ drifts between the note and the ledger with nothing able to notice.
    or anything stable for a pasted log, and `(match_id, game)` has to be unique across
    the ledger.
 
+   **Every line carries its `format`.** Standard, Historic, Modern, whatever was
+   actually played. The ledger had no format field until 2026-09-08, and because
+   the insights folder is per format, 29 Historic games and 12 Standard games
+   were rolling up into one Standard profile: a Historic deck and its matchup
+   record sat in the folder a Standard question reads.
+
+   The split the script makes, and the reason to get this field right: **a deck,
+   a matchup record and a kept hand belong to one format. A habit does not.**
+   Decks and matchups count that format's games; habits count every game in the
+   ledger, because how someone plays travels with them and a fortnight in
+   another format is not evidence that a leak got fixed. The run prints which
+   sample each number came from.
+
+   A ledger written before the field existed still validates: `format` is
+   optional and inferred from the era slug. `python migrate_play_log_format.py
+   --dry-run` shows what it would stamp, and writes a `.pre-format.jsonl` backup
+   when you let it run.
+
 2. **Run the rollup.** It reads the ledger and rewrites `[C] Play Profile.md` plus one
    `[C] Play Profile - {deck}.md` per deck in the ledger.
 

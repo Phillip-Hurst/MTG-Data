@@ -15,7 +15,8 @@ Claude reads what they produce.
 | You want to know | Skill | Because |
 |---|---|---|
 | What's winning, what moved, what's the matchup matrix | `mtg-tournament-analysis` | It reads the field. It never names a deck. |
-| Which cards are quietly performing | `mtg-tournament-analysis` | `card_signal.py`, four lenses: rogue, deviation, trend, unnamed |
+| Which cards are quietly performing | `mtg-tournament-analysis` | `card_signal.py`, five lenses: rogue, deviation, trend, adoption, unnamed |
+| What the field is boarding, week by week | `mtg-tournament-analysis` | `card_signal.py --lens adoption`. Reads sideboards, which nothing did before 2026-09-08 |
 | This deck is under the wrong name | `deck-check` | It's the only thing that writes a label into the files the numbers read |
 | Name this unnamed shell | `deck-check` | Analysis hands it over on purpose |
 | Clear the mislabel queue | `deck-check` | `apply_corrections.py` reads your `Decision:` lines |
@@ -41,33 +42,61 @@ sounds obvious and it's the source of most of this project's bugs, so it's writt
 down.
 
 ```
-melee.gg ──> mtg_fetch.py ──> melee_<fmt>_*_pairings.csv
-                                melee_<fmt>_*_standings.csv
+melee.gg ──> mtg_fetch.py ──> melee_<fmt>_<id>_pairings.csv   <- source of truth
+                                melee_<fmt>_<id>_standings.csv
                                 melee_deck_cache.json
 MTGO     ──> fetch_mtgo.py ──> mtgo_challenge_latest.json
                                 mtgo_5-0_latest.json
 mtgtop8  ──> build_mtgtop8_baseline.py ──> archetype_refs.json
                                             baselines/meta_baseline_mtgtop8_<fmt>.json
                                    |
-                        validate_events.py   quarantines bad events, rewrites the CSVs
+                        validate_events.py   judges each event, renames the losers
                         audit_refs.py        checks the references are in-era and distinct
+                                   |
+                        combine_events.py    THE ONE WRITER of melee_<fmt>_all_*.csv
+                                             rebuilds from the per-event files,
+                                             verdicts applied, never in place
                                    |
     build_baseline.py ──> baselines/meta_baseline_<era_slug>.json
     matchup_matrix.py ─┐
-    winrate_analysis.py├─> read the CSVs, never the cache
-    card_signal.py    ─┘
+    winrate_analysis.py├─> combine_events.load_pool(..., resolve_names=True)
+    update_archetypes.py┘   one pool, one vocabulary
+    card_signal.py    ───> the MTGO dumps, main and side
 ```
+
+**The combined CSVs are derived. Rebuild them; never edit them.**
+`combine_events.py` is the only thing that writes `melee_<fmt>_all_*.csv`. It
+reads the per-event files, applies the quarantine's verdicts and the seat
+filter, and writes `melee_<fmt>_all_coverage.json` beside them saying which
+events made it in. Before 2026-09-08 three scripts wrote that file with three
+different definitions, and `validate_events` filtered it in place so each run
+filtered the previous run's output: the standings file went 553 rows to 312 to
+241 while 27 per-event files sat on disk.
+
+**Every pairing consumer speaks the classifier's vocabulary.**
+`deck_labels.py` is the one place a tournament result becomes an archetype name:
+override > classifier > organizer text > dropped. `resolve_pairing_decks` puts
+the matchup layer on it too, which took distinct labels from 122 to 104 and
+matchup cells at the 10-match floor from 8 to 14. For standings, a result whose
+decklist isn't in the cache leaves the sample; for pairings, organizer text is
+kept and counted separately, because a row records who beat whom.
+
+**A pairing seat with no name and no deck URL cannot be recovered.** 775 of the
+783 unnamed seats have neither, so the scraper captured nothing to look them up
+by. That is a `melee_scraper.py` gap, not a naming one.
 
 ### Which file does a given consumer actually read?
 
 | Consumer | Reads |
 |---|---|
-| `matchup_matrix.py`, `winrate_analysis.py` | `melee_*_pairings.csv`, per-event and combined |
-| `build_baseline.py` | `melee_<fmt>_all_standings.csv` |
+| `matchup_matrix.py`, `winrate_analysis.py`, `update_archetypes.py` | the pool via `combine_events.load_pool(..., resolve_names=True)` |
+| `build_baseline.py` | `melee_<fmt>_all_standings.csv`, plus `deck_labels.py` for every deck name |
+| `combine_events.py` | the per-event `melee_<fmt>_<id>_*.csv`, live and `.quarantined.csv` |
+| `deck_labels.py` | `melee_deck_cache.json`, `archetype_refs.json`, `archetype_overrides.json` |
 | `build_refs_from_melee.py` | `melee_deck_cache.json` |
 | MTGO shares | `mtgo_classifications.json` |
-| `classify_decks.py` | `archetype_refs.json` |
-| `play_profile.py` | `play_log.jsonl`, and it rewrites `[C] Play Profile.md` |
+| `card_signal.py` | `mtgo_*_latest.json` mainboards **and** sideboards, plus `card_pool_<fmt>.json` for colour and type |
+| `play_profile.py` | `play_log.jsonl`, split on `format`, and it rewrites `[C] Play Profile.md` |
 
 **This table is the whole point.** Fixing data means fixing the file the consumer
 reads, not the one that looks canonical. On 2026-08-29 a correction that reached only

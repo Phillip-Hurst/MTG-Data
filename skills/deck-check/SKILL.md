@@ -34,6 +34,54 @@ apply_corrections.py      →  archetype_overrides.json  (the durable ruling)
               melee_deck_cache.json · mtgo_classifications.json ← shares, references
 ```
 
+## The other loop: draining the MTGO queue
+
+The one above fixes labels that are wrong. This one fixes decks that have no
+label at all, which is what actually makes a queue grow.
+
+```
+classify_decks.py --rerun   →  [C] MTGO Review Queue.md   (one rolling file)
+                                      ↓  reason: coverage
+cluster_shells.py           →  [C] Unnamed Shells YYYY-MM-DD.md
+                                      ↓  you fill in Name: lines
+cluster_shells.py --apply   →  new references
+refine_refs.py --signatures --gates --write
+classify_decks.py --rerun   →  a shorter queue
+```
+
+**Read the reason split before working through the queue deck by deck.** Each
+reason has a different lever, and only one of them is a per-deck judgement:
+
+| reason | what it means | what to do |
+|---|---|---|
+| `coverage` | no reference is close | `cluster_shells.py`. These are usually a handful of unnamed decks, not hundreds of brews |
+| `containment` | the reference explains too little of the deck | it's thin — feed it more decklists |
+| `margin` | two references are too close | `refine_refs.py --gates`, or alias them together |
+| `no eligible reference` | every reference is gated out | check the `requires` / `excludes` lists |
+
+A queue of 200 `coverage` entries is about 20 missing categories. Naming them is
+20 decisions; triaging the decks is 200. On the first run of this loop, 27 shells
+covered 83% of the queue.
+
+**Naming a shell is still yours.** `cluster_shells.py` proposes and never decides.
+What it guarantees is that once a shell is named, its decks stop coming back.
+
+Suggestions come from two lookups, in order:
+
+1. **`archetype_vocabulary.json`** — the format's published names, from
+   MTGGoldfish's metagame table: archetype, meta share, and the three cards that
+   define it. Two of three defining cards in a shell's core is a match worth
+   prefilling; one is shown but flagged weak, because Deceit defines two
+   archetypes and Stock Up defines four.
+2. **the melee cache** — what organizers typed for lists with a similar core.
+   Useful for decks too new or too fringe to be catalogued yet.
+
+Refresh the vocabulary with `python fetch_vocabulary.py` after any set release or
+B&R announcement. **It's also the cheapest check on whether a deck actually
+died.** On 2026-09-07 that table showed Izzet Prowess alive at 1.0% and 13 decks
+after Stormchaser's Talent was banned — a ban deletes a card, and whether the
+deck folds or rebuilds is a question for the data.
+
 ## Reading the note
 
 Each flagged deck carries a `Decision:` line, pre-filled with the card match:
@@ -102,7 +150,16 @@ Three sources, in order of how much work they cost:
 
 mtgdecks.net returns HTTP 403 behind Cloudflare. Don't build on it.
 
-Seeding is additive: `_write_refs` only adds labels that aren't already there, so re-running never clobbers a reference you refined locally. Refs from another era or another format are rejected before they land.
+**Every write to `archetype_refs.json` goes through `refs_store.py`, and merging is the default.** A run only builds references for archetypes it has enough cached decks for, so replacing the whole set meant everything below the bar vanished, silently, exit 0. Now a label absent from a run's output is kept, and a label present is only overwritten when this run has at least as many decklists behind it. Refs from another era or another format are still rejected before they land.
+
+The write reports added / updated / kept / untouched, plus the total decklists behind the references. **That total should climb scrape over scrape.** If it falls, something replaced instead of merging.
+
+Two controls matter:
+
+- `--replace-refs` on `build_refs_from_melee.py` or `classify_decks.py --build-refs` discards everything and keeps only this run's output. That's a reset, not a rebuild. It backs up to `archetype_refs.pre-replace.json` first, and nothing should reach for it on a schedule.
+- `"pinned": true` on an entry means no automated rebuild touches it. Use it when a reference is anchored on a list no scrape will ever produce. `Four-Color Control (Black Base)` is anchored on Deriu's MTGGoldfish 75, so it's pinned until enough of the field is cached.
+
+**A reference can require a card.** `"requires": ["Inevitable Defeat"]` makes a deck ineligible for that reference unless it plays one of the named cards, whatever its slot overlap says. Slot overlap can't see a colour: three-colour Jeskai Control shares Jeskai Revelation, Tablet of Discovery, Consult the Star Charts, Stock Up and most of a manabase with four-colour Jeskai Tablet, so it scored 30-40 against the wrong reference and came back through the queue on every run. Reach for this when two archetypes keep tying and one card genuinely separates them.
 
 **Re-seed after every ban and every set release.** That's what keeps the unnamed share down. On 2026-08-29, seeding from mtgtop8 took it from 42% to 24% in one command.
 
@@ -118,7 +175,8 @@ python audit_refs.py --apply-aliases      # collapse duplicates
 `mtg_fetch.py` runs the report after every scrape. What it catches:
 
 - **banned / off-format references.** A reference built from the wrong era renames live decks to something that can't be registered.
-- **collisions.** Two references sharing 60%+ of their slots produce near-tied match scores, and `classify_decks` picks on raw slot overlap with no margin — so a tie resolves by dictionary order. This is the documented root cause of the review-queue flood.
+- **collisions.** Two references sharing 60%+ of their slots produce near-tied match scores, and `classify_decks` picks on raw slot overlap with no margin — so a tie resolves by dictionary order. This is the documented root cause of the review-queue flood. When one card genuinely separates the pair, `"requires"` settles it; when nothing does, they're one archetype and want an alias.
+- **the evidence total.** `Decklists behind them` is the number that should grow. A drop means a writer replaced instead of merging.
 - **thin references.** Under 8 cards will over-match anything in its colours.
 - **coverage.** How much of the live field has no archetype at all.
 

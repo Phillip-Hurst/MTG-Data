@@ -62,6 +62,10 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+
+import refs_store  # noqa: E402  (needs SCRIPT_DIR on the path first)
+
 DATA_DIR = os.environ.get("MTG_DATA_DIR", SCRIPT_DIR)
 
 # Reuse the one true modal-aggregation + DFC normalization. If classify_decks
@@ -280,11 +284,13 @@ def build(fmt, max_archetypes, decks_per_archetype, delay, verbose, dry_run):
         mainboard = build_ref_from_decks(decks)
         if not mainboard:
             continue
-        archetype_refs[label] = {
-            "mainboard": mainboard,
-            "notes": f"Baseline from mtgtop8 ({label_meta.get(label, '?')} umbrella), "
-                     f"{len(decks)} list(s), {date.today().isoformat()}",
-        }
+        archetype_refs[label] = refs_store.make_entry(
+            mainboard,
+            notes=f"Baseline from mtgtop8 ({label_meta.get(label, '?')} umbrella), "
+                  f"{len(decks)} list(s), {date.today().isoformat()}",
+            decks=len(decks),
+            source="mtgtop8",
+        )
 
     snapshot = {
         "source": "mtgtop8.com",
@@ -373,32 +379,14 @@ def _write_refs(new_refs, fmt="Standard"):
             print(f"    {label} — {why}")
     new_refs = kept
 
-    path = os.path.join(DATA_DIR, "archetype_refs.json")
-    data = {"_note": "Reference mainboard lists for archetype classification. "
-                     "Each entry: {mainboard: {card: count}, notes: str}. "
-                     "Seeded by build_mtgtop8_baseline.py; refined by "
-                     "classify_decks.py once you have local scrapes.",
-            "_schema_version": 1,
-            "_source": "mtgtop8 baseline + local scrapes",
-            "archetypes": {}}
-    if os.path.exists(path):
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            data.setdefault("archetypes", {})
-        except (OSError, ValueError) as e:
-            print(f"  Existing archetype_refs.json unreadable ({e}); starting fresh.")
-            data["archetypes"] = {}
-    added = 0
-    for label, ref in new_refs.items():
-        if label not in data["archetypes"]:
-            data["archetypes"][label] = ref
-            added += 1
+    # Merge through the shared store. The old rule here was "add only if the
+    # label is missing", which meant a 3-deck mtgtop8 seed outranked a 40-deck
+    # local rebuild forever. refs_store compares deck counts instead, so a seed
+    # fills a gap and then gets superseded the moment local data beats it.
     os.makedirs(DATA_DIR, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    print(f"  archetype_refs.json: {added} new label(s), "
-          f"{len(data['archetypes'])} total -> {path}")
+    path = os.path.join(DATA_DIR, "archetype_refs.json")
+    refs_store.save(path, new_refs, source="mtgtop8")
+    print(f"  -> {path}")
 
 
 def _write_snapshot(snapshot, fmt):
