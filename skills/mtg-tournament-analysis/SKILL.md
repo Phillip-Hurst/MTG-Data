@@ -112,7 +112,7 @@ python mtg_era.py
 
 It prints the current era, the date it started, why it started there, and what the previous era was. The window start comes from whichever is later: the newest set release in `set_releases.json`, or the newest B&R announcement for this format in `bans.json`. `mtg_fetch.py` and `build_baseline.py` both anchor on it.
 
-**Current Standard era: post-ban, 2026-08-10 onward.** Badgermole Cub, Stormchaser's Talent, and Gran-Gran are banned. Selesnya Offense, Izzet Prowess, and Jeskai Lessons are the decks that lost a card. Anything from before that date is a different format.
+**Don't take the era from this file; run `mtg_era.py`.** As of 2026-10-17 the Standard era is Reality Fracture, from its Arena release on 2026-09-29, and the 2026-10-12 B&R made no Standard change. The last Standard bans were 2026-08-10: Badgermole Cub, Stormchaser's Talent and Gran-Gran (Selesnya Offense, Izzet Prowess and Jeskai Lessons lost a card). This line went stale once already: it named the post-ban era for a week after Reality Fracture had replaced it. When a set lands, add it to `set_releases.json` and refresh the card pool (`build_card_pool.py --max-age-days 0`) the same day, or `validate_events.py` quarantines the new set's events as off-format.
 
 ### When a ban lands
 

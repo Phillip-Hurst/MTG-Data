@@ -161,15 +161,28 @@ def test_missing_format_field_is_allowed_through_to_the_validator():
 
 # ── era anchors ───────────────────────────────────────────────────────────────
 
-def test_ban_and_set_release_within_a_fortnight_merge_to_the_earlier_date():
+def test_ban_and_set_release_within_a_fortnight_merge_to_the_earlier_date(monkeypatch):
     """
     The Hobbit released 2026-08-14, four days after the 2026-08-10 bans.
     Anchoring on the set would throw away three days of post-ban results.
+
+    Pinned to the sets on file as of The Hobbit, because resolve_era reads the
+    latest set and Reality Fracture (2026-09-29) has since become the current era.
     """
+    sets = [s for s in mtg_era.load_sets() if s["release_date"] <= "2026-08-14"]
+    monkeypatch.setattr(mtg_era, "load_sets", lambda: sets)
     era = mtg_era.resolve_era(fmt="Standard")
     assert era["start_str"] == "2026-08-10"
     assert era["anchor"] == "ban+set-release"
     assert "Hobbit" in era["label"]
+
+
+def test_reality_fracture_is_the_current_standard_era():
+    """Released on Arena 2026-09-29, with no Standard change at the 2026-10-12 B&R."""
+    era = mtg_era.resolve_era(fmt="Standard")
+    assert era["start_str"] == "2026-09-29"
+    assert era["anchor"] == "set-release"
+    assert "Reality Fracture" in era["label"]
 
 
 def test_the_hobbit_is_on_file():

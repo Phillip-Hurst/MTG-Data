@@ -92,6 +92,7 @@ KINDS = (
     "sideboarding",
     "lost-turn",
     "rules-error",
+    "life-total",
 )
 GRADES = ("punt", "close", "correct")
 RESULTS = ("W", "L", "D")
@@ -185,10 +186,34 @@ ROW_REQUIRED = ("date", "session_id", "match_id", "your_deck", "their_deck",
                 "game", "result", "findings")
 FINDING_KEYS = frozenset((
     "phase", "turn", "kind", "pattern_id", "grade", "note", "stated_reason",
-    "intent_matched_line", "prompted_by_profile",
+    "intent_matched_line", "prompted_by_profile", "life",
 ))
-HAND_KEYS = frozenset(("kept_at", "lands", "cards", "shape", "outcome", "note"))
-SIDEBOARD_KEYS = frozenset(("in", "out"))
+# Life spent on a decision, on any finding whatever its pattern. Paying 3 for
+# Bitter Triumph and casting Stock Up into a big attack are both the same choice
+# underneath: treating the life total as a resource. Most of the time that is
+# right. The count that matters is how often it was the margin the game was
+# lost by, which is what `cost_the_game` records.
+#
+# `spent` is the life the decision gave up: the payment itself, or the damage
+# taken that the other line would have prevented.
+LIFE_KEYS = frozenset(("spent", "cost_the_game"))
+HAND_KEYS = frozenset(("kept_at", "lands", "cards", "shape", "outcome", "note",
+                       "composition"))
+# What the kept hand was made of. "Lands and spells" told you nothing about
+# whether the spells were threats, answers or card draw, and those are three
+# different keeps. Every card goes in exactly one slot, so the slots sum to
+# `kept_at`, and `lands` has to agree with the hand's own land count.
+#
+#   threats         creatures, planeswalkers, anything that wins if left alone
+#   interaction     removal, counters, discard, bounce, sweepers
+#   card_advantage  draw, selection, card-flow engines
+#   other           mana rocks and anything that is none of the above
+#
+# A card that does two jobs goes where the deck uses it: Deceit in a deck that
+# casts it for the bounce is interaction, in one that evokes nothing it is a
+# threat. The helper in untapped_log.py suggests a split; the reviewer owns it.
+COMPOSITION_KEYS = ("lands", "threats", "interaction", "card_advantage", "other")
+SIDEBOARD_KEYS = frozenset(("in", "out", "size_change"))
 PACE_KEYS = frozenset(("measure", "seconds_per_turn", "tells"))
 INTERVIEW_KEYS = frozenset(("asked", "answered", "dont_remember"))
 
@@ -212,14 +237,43 @@ PACE_TELLS = (
 # four-drops" is a review. Storing the card list also makes the ledger the index
 # of what this player actually keeps, which `--hands` prints.
 HAND_SHAPES = (
-    "lands-and-spells",     # functional: enough lands, a curve to spend them on
-    "interaction-heavy",    # removal and counters, light on lands or threats
-    "threat-heavy",         # threats with too little interaction or mana
-    "land-light",           # fewer lands than the deck wants to function
-    "land-heavy",           # lands with too little action
+    "balanced",             # lands, and no one kind of spell over half the rest
+    "interaction-heavy",    # over half the spells are removal, counters, discard
+    "threat-heavy",         # over half the spells are threats
+    "card-advantage-heavy", # over half the spells are draw and selection
+    "land-light",           # one land or none
+    "land-heavy",           # four or more lands and two spells or fewer
     "no-early-play",        # nothing castable before the opponent's clock lands
+    "lands-and-spells",     # legacy: rows written before `composition` existed
     "unknown",
 )
+# Shapes that follow arithmetically from a composition. `no-early-play` needs a
+# judgement about mana costs, so it is the one a reviewer can still record over
+# a composition. The others are derived, and a recorded one that disagrees is a
+# problem, because then the shape and the card count describe two hands.
+DERIVED_SHAPES = ("balanced", "interaction-heavy", "threat-heavy",
+                  "card-advantage-heavy", "land-light", "land-heavy")
+
+
+def derive_shape(composition, kept_at):
+    """The shape a composition implies. None if the composition is unusable."""
+    if not isinstance(composition, dict) or not isinstance(kept_at, int):
+        return None
+    lands = composition.get("lands")
+    if not isinstance(lands, int):
+        return None
+    spells = kept_at - lands
+    if lands <= 1:
+        return "land-light"
+    if lands >= 4 and spells <= 2:
+        return "land-heavy"
+    for slot, shape in (("threats", "threat-heavy"),
+                        ("interaction", "interaction-heavy"),
+                        ("card_advantage", "card-advantage-heavy")):
+        n = composition.get(slot)
+        if isinstance(n, int) and spells and n * 2 > spells:
+            return shape
+    return "balanced"
 # What the draw actually did to the hand afterwards. Kept separate from shape so
 # a keep can be graded on what was knowable, then compared against what happened.
 HAND_OUTCOMES = ("screwed", "flooded", "neither", "unknown")
@@ -405,6 +459,21 @@ def validate_row(row, line_no, patterns=None):
             if row["game"] < low or (high is not None and row["game"] > high):
                 bad("%s is %s, which does not happen in game %d"
                     % (where, phase, row["game"]))
+        life = f.get("life")
+        if life is not None:
+            if not isinstance(life, dict):
+                bad("%s life is not an object" % where)
+            else:
+                _unknown_keys(life, LIFE_KEYS, "%s life" % where, bad)
+                spent = life.get("spent")
+                if not isinstance(spent, int) or isinstance(spent, bool) \
+                        or spent < 1:
+                    bad("%s life spent %r is not a positive integer"
+                        % (where, spent))
+                if not isinstance(life.get("cost_the_game"), bool):
+                    bad("%s life cost_the_game %r is not true or false. Say "
+                        "which: an unknown here is the one number the "
+                        "profile counts." % (where, life.get("cost_the_game")))
         fnote = f.get("note")
         if fnote is not None:
             if not isinstance(fnote, str):
@@ -433,9 +502,42 @@ def validate_row(row, line_no, patterns=None):
             elif isinstance(kept_at, int) and len(cards) != kept_at:
                 bad("hand has %d card(s) listed but kept_at is %d"
                     % (len(cards), kept_at))
-            if hand.get("shape") not in HAND_SHAPES:
-                bad("hand shape %r is not in the fixed vocabulary"
-                    % (hand.get("shape"),))
+            comp = hand.get("composition")
+            derived = None
+            if comp is not None:
+                if not isinstance(comp, dict):
+                    bad("hand composition is not an object")
+                else:
+                    _unknown_keys(comp, frozenset(COMPOSITION_KEYS),
+                                  "hand composition", bad)
+                    missing = [k for k in COMPOSITION_KEYS if not (
+                        isinstance(comp.get(k), int)
+                        and not isinstance(comp.get(k), bool)
+                        and comp[k] >= 0)]
+                    if missing:
+                        bad("hand composition needs a non-negative integer "
+                            "for every slot; missing or bad: %s"
+                            % ", ".join(missing))
+                    else:
+                        total = sum(comp[k] for k in COMPOSITION_KEYS)
+                        if isinstance(kept_at, int) and total != kept_at:
+                            bad("hand composition adds to %d but kept_at is %d. "
+                                "Every card goes in exactly one slot."
+                                % (total, kept_at))
+                        if isinstance(lands, int) and comp["lands"] != lands:
+                            bad("hand composition says %d land(s) but lands is "
+                                "%d" % (comp["lands"], lands))
+                        derived = derive_shape(comp, kept_at)
+            shape = hand.get("shape")
+            if shape is None and derived is not None:
+                pass                      # derived at roll-up
+            elif shape not in HAND_SHAPES:
+                bad("hand shape %r is not in the fixed vocabulary" % (shape,))
+            elif (derived is not None and shape != derived
+                  and shape != "no-early-play"):
+                bad("hand shape %r disagrees with its composition, which makes "
+                    "it %r. Drop `shape` and let it be derived, or fix the "
+                    "count." % (shape, derived))
             outcome = hand.get("outcome", "unknown")
             if outcome not in HAND_OUTCOMES:
                 bad("hand outcome %r is not in the fixed vocabulary" % (outcome,))
@@ -505,13 +607,28 @@ def _sideboard_balance(row, line_no):
     n_in, n_out = board.get("in"), board.get("out")
     if not isinstance(n_in, list) or not isinstance(n_out, list):
         return None
-    if len(n_in) == len(n_out):
+    # A deck can grow between games: 60 to 61 is legal and does happen. The
+    # boarding row says so with `size_change`, read off the decklists, and the
+    # arithmetic checks against that instead of against zero.
+    change = board.get("size_change", 0)
+    if not isinstance(change, int) or isinstance(change, bool):
+        row.pop("sideboard")
+        return ("line %d: sideboard size_change %r is not an integer. The "
+                "boarding lists are set aside for this game." % (line_no, change))
+    if len(n_in) - len(n_out) == change:
         return None
     row.pop("sideboard")
+    if change:
+        return ("line %d: sideboard brings in %d card(s) and takes out %d, but "
+                "size_change says the deck changed by %d. One list is short. "
+                "The boarding lists are set aside for this game and its "
+                "findings still count." % (line_no, len(n_in), len(n_out),
+                                            change))
     return ("line %d: sideboard brings in %d card(s) and takes out %d. A deck "
-            "keeps its size, so one list is short. The boarding lists are set "
-            "aside for this game and its findings still count: diff the "
-            "decklists in the log again rather than counting from memory."
+            "keeps its size unless `size_change` says otherwise, so one list is "
+            "short. The boarding lists are set aside for this game and its "
+            "findings still count: diff the decklists in the log again rather "
+            "than counting from memory."
             % (line_no, len(n_in), len(n_out)))
 
 
@@ -634,6 +751,23 @@ def classify(occurrences, sessions, grades, min_occurrences, min_sessions):
     return "below-bar"
 
 
+def mean_composition(comps):
+    """Mean of each composition slot over a list of hands, or None if empty."""
+    comps = [c for c in comps if isinstance(c, dict)]
+    if not comps:
+        return None
+    out = {"hands": len(comps)}
+    for k in COMPOSITION_KEYS:
+        out[k] = round(sum(c.get(k, 0) for c in comps) / len(comps), 1)
+    return out
+
+
+def _composition_line(c):
+    return ("%.1f lands, %.1f threats, %.1f interaction, %.1f card advantage, "
+            "%.1f other" % (c["lands"], c["threats"], c["interaction"],
+                            c["card_advantage"], c["other"]))
+
+
 def hand_keeps_top(card_keeps, limit=10):
     """Cards that show up most often in hands this player chose to keep.
 
@@ -704,8 +838,12 @@ def roll_up(rows, min_occurrences, min_sessions, patterns=None):
     # neither situation.
     hands_by_knowledge = defaultdict(lambda: {
         "games": 0, "results": Counter(), "lands": [], "outcomes": Counter(),
-        "shapes": Counter(), "kept_at": Counter(),
+        "shapes": Counter(), "kept_at": Counter(), "composition": [],
     })
+    # Composition by result, so "the hands I lose with" has a shape you can
+    # read: more lands, fewer threats, or no interaction.
+    composition_by_result = defaultdict(list)
+    life_rows = []
     mulligans = defaultdict(lambda: {
         "occurrences": 0, "grades": Counter(), "patterns": Counter(),
     })
@@ -764,6 +902,22 @@ def roll_up(rows, min_occurrences, min_sessions, patterns=None):
                 k["intent_mismatch"] += 1
             if k["last_seen"] is None or r["date"] > k["last_seen"]:
                 k["last_seen"] = r["date"]
+            life = f.get("life")
+            if isinstance(life, dict):
+                life_rows.append({
+                    "date": r["date"],
+                    "match_id": r["match_id"],
+                    "game": r["game"],
+                    "turn": f.get("turn"),
+                    "your_deck": r["your_deck"],
+                    "their_deck": r["their_deck"],
+                    "result": r["result"],
+                    "pattern_id": f["pattern_id"],
+                    "grade": f["grade"],
+                    "spent": life["spent"],
+                    "cost_the_game": life["cost_the_game"],
+                    "review_note": r.get("review_note"),
+                })
 
         pace = r.get("pace") or {}
         measure = pace.get("measure")
@@ -782,6 +936,9 @@ def roll_up(rows, min_occurrences, min_sessions, patterns=None):
 
         hand = r.get("hand")
         if isinstance(hand, dict):
+            comp = hand.get("composition")
+            if isinstance(comp, dict) and hand.get("shape") is None:
+                hand["shape"] = derive_shape(comp, hand["kept_at"])
             size = hand["kept_at"]
             outcome = hand.get("outcome", "unknown")
             bucket = hands_by_size[size]
@@ -802,6 +959,9 @@ def roll_up(rows, min_occurrences, min_sessions, patterns=None):
             kb["outcomes"][outcome] += 1
             kb["shapes"][hand["shape"]] += 1
             kb["kept_at"][size] += 1
+            if isinstance(comp, dict):
+                kb["composition"].append(comp)
+                composition_by_result[r["result"]].append(comp)
             for card in hand["cards"]:
                 card_keeps[card.strip()] += 1
             hand_rows.append({
@@ -818,6 +978,7 @@ def roll_up(rows, min_occurrences, min_sessions, patterns=None):
                 "lands": hand["lands"],
                 "shape": hand["shape"],
                 "outcome": outcome,
+                "composition": dict(comp) if isinstance(comp, dict) else None,
                 "cards": list(hand["cards"]),
                 "note": hand.get("note"),
             })
@@ -933,8 +1094,13 @@ def roll_up(rows, min_occurrences, min_sessions, patterns=None):
                 "outcomes": dict(sorted(v["outcomes"].items())),
                 "shapes": dict(v["shapes"].most_common()),
                 "kept_at": dict(sorted(v["kept_at"].items(), reverse=True)),
+                "composition": mean_composition(v["composition"]),
             }
             for k, v in sorted(hands_by_knowledge.items())
+        },
+        "composition_by_result": {
+            res: mean_composition(v)
+            for res, v in sorted(composition_by_result.items())
         },
         "index": sorted(hand_rows, key=lambda h: (h["date"], h["game"])),
     }
@@ -964,8 +1130,18 @@ def roll_up(rows, min_occurrences, min_sessions, patterns=None):
         })
     matchup_rows.sort(key=lambda m: (-m["games"], m["their_deck"]))
 
+    life = {
+        "decisions": len(life_rows),
+        "spent": sum(x["spent"] for x in life_rows),
+        "cost_the_game": sum(1 for x in life_rows if x["cost_the_game"]),
+        "by_pattern": dict(Counter(x["pattern_id"] for x in life_rows)
+                           .most_common()),
+        "index": sorted(life_rows, key=lambda x: (x["date"], x["game"])),
+    }
+
     all_dates = sorted({r["date"] for r in rows})
     return {
+        "life": life,
         "games": total_games,
         "rows": len(rows),
         "hands": hands,
@@ -1062,6 +1238,27 @@ def _classification_table(rollup, cross_deck_only=False):
             h["label"], label, h["kind"], h["occurrences"], h["games"],
             _grade_split(h["grades"]), len(h["decks"])))
     return "\n".join(out)
+
+
+def _life_section(rollup, lines):
+    """Life spent as a resource, and how often it was the margin."""
+    life = rollup.get("life") or {}
+    if not life.get("decisions"):
+        return
+    lines += ["## Life total", "",
+              "**%d decision(s) spent %d life; %d of them cost the game.** "
+              "Spending life is often right. The number that matters is the "
+              "last one: games where the life given up was the margin."
+              % (life["decisions"], life["spent"], life["cost_the_game"]), "",
+              "| Date | Game | Turn | Deck vs | Spent | Cost the game | Grade | "
+              "Pattern |",
+              "|---|---|---|---|---|---|---|---|"]
+    for x in life["index"]:
+        lines.append("| %s | G%d | %s | %s vs %s | %d | %s | %s | `%s` |" % (
+            x["date"], x["game"], x["turn"] if x["turn"] is not None else "-",
+            x["your_deck"], x["their_deck"], x["spent"],
+            "yes" if x["cost_the_game"] else "no", x["grade"], x["pattern_id"]))
+    lines.append("")
 
 
 def _mulligan_section(rollup, lines):
@@ -1338,6 +1535,7 @@ def render_deck_profile(deck, rollup, problems, today=None):
         lines += ["Nothing has cleared the bar as a leak on this deck.", ""]
 
     _mulligan_section(rollup, lines)
+    _life_section(rollup, lines)
     _matchup_section(rollup, lines)
     _sideboard_section(rollup, lines)
 
@@ -1545,6 +1743,25 @@ def render_profile(rollup, problems, today=None):
         shapes = ", ".join("%s x%d" % (s, n) for s, n in hands["shapes"].items())
         lines += ["Shapes kept: %s." % shapes, ""]
 
+        comp_rows = [(k, v["composition"])
+                     for k, v in (hands.get("by_knowledge") or {}).items()
+                     if v.get("composition")]
+        comp_rows += [("kept and %s" % {"W": "won", "L": "lost", "D": "drew"}
+                       .get(res, res), c)
+                      for res, c in (hands.get("composition_by_result") or {})
+                      .items() if c]
+        if comp_rows:
+            lines += ["**What the kept hands were made of**, as a mean per hand. "
+                      "Only hands logged with a composition count here.", "",
+                      "| Hands | n | Lands | Threats | Interaction | "
+                      "Card advantage | Other |",
+                      "|---|---|---|---|---|---|---|"]
+            for name, c in comp_rows:
+                lines.append("| %s | %d | %.1f | %.1f | %.1f | %.1f | %.1f |" % (
+                    name, c["hands"], c["lands"], c["threats"],
+                    c["interaction"], c["card_advantage"], c["other"]))
+            lines.append("")
+
         screwed = hands["outcomes"].get("screwed", 0)
         flooded = hands["outcomes"].get("flooded", 0)
         if screwed or flooded:
@@ -1561,6 +1778,8 @@ def render_profile(rollup, problems, today=None):
         lines += ["**No hands recorded yet.** A mulligan finding needs the hand "
                   "behind it to be arguable, so reviews from here on log the kept "
                   "hand card-for-card.", ""]
+
+    _life_section(rollup, lines)
 
     # Pace
     lines += ["## Pace", ""]
@@ -1828,6 +2047,8 @@ def main():
                      "" if h["lands"] == 1 else "s", h["shape"], h["outcome"],
                      "  on the play" if h["on_the_play"] else ""))
             print("      %s" % ", ".join(h["cards"]))
+            if h.get("composition"):
+                print("      %s" % _composition_line(h["composition"]))
             if h.get("note"):
                 print("      %s" % h["note"])
         print()

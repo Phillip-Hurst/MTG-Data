@@ -170,6 +170,42 @@
       "label": "Acts on a remembered rule instead of looking it up",
       "description": "Plays or grades a line on a recollection of how an interaction works, where the Comprehensive Rules say otherwise. This is the one error the player has no way to check from inside the game, which is why rules-check is a required handoff.",
       "polarity": "leak"
+    },
+    "holds-instants-under-a-no-cast-static": {
+      "kind": "mana-holding",
+      "label": "Holds up instants under a static that stops him casting them",
+      "description": "Passes with counters or flash cards up while the opponent controls a permanent that says he can't cast spells during their turn (Voice of Victory), so the mana does nothing and the sorcery-speed play he skipped was the only one available.",
+      "polarity": "leak"
+    },
+    "races-without-counting-their-reach": {
+      "kind": "combat-math",
+      "label": "Attacks with everything without counting their public reach",
+      "description": "Sends the blockers in without adding up the damage the opponent can show next turn from public information: a plotted or foretold card, burn already seen, a pump trigger on a creature in exile or on the battlefield.",
+      "polarity": "leak"
+    },
+    "responds-without-reading-the-modes": {
+      "kind": "rules-error",
+      "label": "Responds to a spell without reading the modes chosen",
+      "description": "Commits a response sized for one mode of a modal spell when the opponent chose another, or both, and the stack showed it.",
+      "polarity": "leak"
+    },
+    "keeps-a-one-spell-seven": {
+      "kind": "mulligan",
+      "label": "Keeps a seven that is lands and one or two spells",
+      "description": "Keeps five or six lands with one or two spells, usually on the strength of a cantrip, when the deck needs action by turn four to matter.",
+      "polarity": "leak"
+    },
+    "bins-the-only-source-of-a-colour": {
+      "kind": "land-sequencing",
+      "label": "Bins the only source of a colour the hand is waiting on",
+      "description": "Surveils or discards away the one land that makes the colour his stranded spells need, chasing a better land that may not come.",
+      "polarity": "leak"
+    },
+    "spends-life-as-a-resource": {
+      "kind": "life-total",
+      "label": "Spends life as a resource",
+      "description": "Pays life instead of a card or mana (Bitter Triumph's 3, a shock land untapped, Starting Town), or takes a hit to develop instead of answering. Usually correct. Grade it a punt when the life spent was the margin the game was lost by, and set the finding's life.cost_the_game.",
+      "polarity": "neutral"
     }
   }
 }

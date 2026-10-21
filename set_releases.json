@@ -3,6 +3,7 @@
   "sets": [
     {"name": "Secrets of Strixhaven", "code": "SOT", "release_date": "2026-04-24"},
     {"name": "Marvel Super Heroes", "code": "MSH", "release_date": "2026-06-26"},
-    {"name": "The Hobbit", "code": "HOB", "release_date": "2026-08-14"}
+    {"name": "The Hobbit", "code": "HOB", "release_date": "2026-08-14"},
+    {"name": "Reality Fracture", "code": "FRA", "release_date": "2026-09-29"}
   ]
 }

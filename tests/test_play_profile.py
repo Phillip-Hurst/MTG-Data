@@ -1306,3 +1306,131 @@ def test_the_json_payload_leaves_out_what_the_profile_never_shows(tmp_path):
         run(tmp_path, ["--json", "--full"], ledger=ledger)
     full = json.loads(buf.getvalue())["rollup"]
     assert full["hands"]["index"][0]["cards"][0] == "Island"
+
+
+# ------------------------------------------- life total, composition, size change
+
+LIFE_PATTERNS = dict(PATTERNS, **{
+    "pays-life-placeholder": {
+        "kind": "life-total",
+        "label": "Placeholder life pattern",
+        "description": "Fixture only.",
+        "polarity": "neutral",
+    },
+})
+
+
+def test_life_spent_is_recorded_on_any_finding_and_counted():
+    """
+    Casting Stock Up into a big attack is a mana-holding finding and a life
+    decision at once. The life field rides on whatever the finding is, so the
+    profile can say how often life given up was the margin.
+    """
+    rows = [
+        game("2026-09-01", [finding(pattern_id="taps-out-badly",
+                                    life={"spent": 7, "cost_the_game": True})]),
+        game("2026-09-02", [finding(pattern_id="pays-life-placeholder",
+                                    kind="life-total", grade="correct",
+                                    life={"spent": 3, "cost_the_game": False})],
+             result="W"),
+    ]
+    for r in rows:
+        assert validate(r, 1, LIFE_PATTERNS) == []
+    rolled = rollup(rows, patterns=LIFE_PATTERNS)
+    assert rolled["life"]["decisions"] == 2
+    assert rolled["life"]["spent"] == 10
+    assert rolled["life"]["cost_the_game"] == 1
+    text = pp.render_profile(rolled, [])
+    assert "## Life total" in text
+    assert "1 of them cost the game" in text
+
+
+@pytest.mark.parametrize("life", [
+    {"spent": 0, "cost_the_game": False},
+    {"spent": 3},
+    {"spent": 3, "cost_the_game": "maybe"},
+    {"spent": 3, "cost_the_game": True, "why": "fixture"},
+    "three",
+])
+def test_a_malformed_life_field_is_rejected(life):
+    """An unknown cost_the_game is the one number the section counts."""
+    row = game("2026-09-01", [finding(life=life)])
+    assert validate(row, 1)
+
+
+def test_no_life_section_without_life_findings():
+    text = pp.render_profile(rollup([game("2026-09-01", [finding()])]), [])
+    assert "## Life total" not in text
+
+
+def _comp(lands, threats=0, interaction=0, card_advantage=0, other=0):
+    return {"lands": lands, "threats": threats, "interaction": interaction,
+            "card_advantage": card_advantage, "other": other}
+
+
+@pytest.mark.parametrize("comp,kept_at,shape", [
+    (_comp(1, 3, 2, 1), 7, "land-light"),
+    (_comp(5, 1, 1), 7, "land-heavy"),
+    (_comp(6, 0, 1), 7, "land-heavy"),
+    (_comp(3, 3, 1), 7, "threat-heavy"),
+    (_comp(3, 1, 3), 7, "interaction-heavy"),
+    (_comp(2, 1, 1, 3), 7, "card-advantage-heavy"),
+    (_comp(3, 2, 2), 7, "balanced"),
+    (_comp(2, 2, 2), 6, "balanced"),
+])
+def test_shape_is_derived_from_what_the_hand_was_made_of(comp, kept_at, shape):
+    assert pp.derive_shape(comp, kept_at) == shape
+
+
+def test_a_hand_with_composition_and_no_shape_gets_the_derived_one():
+    row = game_with_hand(kept_at=6, lands=2)
+    row["hand"].pop("shape")
+    row["hand"]["composition"] = _comp(2, 0, 3, 1)
+    assert validate(row, 1) == []
+    rolled = rollup([row])
+    assert rolled["hands"]["index"][0]["shape"] == "interaction-heavy"
+    assert rolled["hands"]["by_knowledge"]["blind"]["composition"]["interaction"] == 3.0
+
+
+@pytest.mark.parametrize("comp,why", [
+    (_comp(2, 0, 3, 0), "adds to 5"),             # one card missing
+    (_comp(3, 0, 2, 1), "says 3 land"),           # disagrees with lands=2
+    ({"lands": 2, "threats": 4}, "missing or bad"),
+])
+def test_a_composition_that_does_not_describe_the_hand_is_rejected(comp, why):
+    row = game_with_hand(kept_at=6, lands=2)
+    row["hand"].pop("shape")
+    row["hand"]["composition"] = comp
+    problems = validate(row, 1)
+    assert any(why in p for p in problems), problems
+
+
+def test_a_recorded_shape_that_disagrees_with_the_composition_is_reported():
+    """Two descriptions of one hand that disagree means one of them is wrong."""
+    row = game_with_hand(kept_at=6, lands=2, shape="threat-heavy")
+    row["hand"]["composition"] = _comp(2, 0, 3, 1)
+    assert any("disagrees" in p for p in validate(row, 1))
+
+
+def test_no_early_play_can_stand_over_a_composition():
+    """It needs a judgement about mana costs, which a count cannot make."""
+    row = game_with_hand(kept_at=6, lands=2, shape="no-early-play")
+    row["hand"]["composition"] = _comp(2, 3, 1, 0)
+    assert validate(row, 1) == []
+
+
+def test_a_deck_that_grew_between_games_balances_with_size_change():
+    """
+    60 to 61 is legal. On 2026-10-17 two real boards went to 61 and were set
+    aside as miscounted, because the check assumed a deck never changes size.
+    """
+    grew = game("2026-10-17", [], game_no=2)
+    grew["sideboard"] = {"in": ["Negate", "Negate"], "out": ["Seam Rip"],
+                         "size_change": 1}
+    assert validate(grew, 1) == []
+    assert pp._sideboard_balance(grew, 1) is None
+
+    wrong = game("2026-10-17", [], game_no=2)
+    wrong["sideboard"] = {"in": ["Negate", "Negate", "Negate"],
+                          "out": ["Seam Rip"], "size_change": 1}
+    assert "size_change" in pp._sideboard_balance(wrong, 1)

@@ -48,6 +48,7 @@ out_file = repo.parent / f"{PLUGIN_NAME}.plugin"
 EXCLUDE_DIRS = {
     ".git",
     "transcripts",
+    "untapped_logs",  # the user's own Arena games, pulled by untapped_log.py
     "__pycache__",
     ".pytest_cache",
     ".ruff_cache",

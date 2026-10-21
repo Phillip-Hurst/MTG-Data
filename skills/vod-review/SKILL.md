@@ -83,8 +83,26 @@ five traps, three of which have already put a wrong finding into a shipped revie
 | **The index** | `api.mtga.untapped.gg/api/v1/games/users/<userId>/players/<playerTag>/?card_set=<CODE>` | Enumerating matches, results, durations, mulligan counts |
 | **The log** | `api.mtga.untapped.gg/api/v1/upload-log/<shortId>` | Every finding in the review |
 
-Both are fetched from the page context, because the sandbox can't reach them and the
-page's origin can. Any `mtga.untapped.gg` page will do.
+**Start with `untapped_log.py`.** Neither endpoint needs a sign-in (checked
+2026-10-17 from a guest session and from the sandbox with plain HTTP), so the script
+pulls and parses without a browser:
+
+```bash
+python untapped_log.py matches --user <userId> --player <playerTag> --set FRA --constructed
+python untapped_log.py fetch --from-matches --constructed --since 2026-10-01
+python untapped_log.py parse --from-matches --constructed --since 2026-10-01
+```
+
+`parse` writes `<shortId>.txt` (a hand and board snapshot at the start of every turn,
+then every draw, land, cast, attack, block, damage and life change) and
+`<shortId>.games.json` (per game: result, play/draw, every hand offered, the kept hand
+with a suggested composition, seconds per turn, and the boarding diff with
+`size_change`). Everything lands in `untapped_logs/`, which is gitignored: it is the
+user's games and the opponents' names. The two-pass rule below still applies; the
+script is pass one.
+
+If the sandbox can't reach the API on a given day, fall back to the browser recipe:
+fetch from the page context of any `mtga.untapped.gg` page.
 
 1. Ask the user for the profile or deck URL. Its path segments are the `userId`,
    `playerTag` and `friendly_deck_id` the index needs, so one pasted deck URL
@@ -95,8 +113,9 @@ page's origin can. Any `mtga.untapped.gg` page will do.
 3. Pull one log per match, throttled. The endpoint 429s under a sustained pull, and a
    batch outlives the 45-second evaluate timeout, so park the run on `window` and poll
    it. The reference note has both recipes.
-4. **The session has to be signed in.** If a page shows a login wall, say so and ask
-   the user to sign in rather than trying to work around it.
+4. **A sign-in is not normally needed.** If an endpoint answers 401 or 403, or a page
+   shows a login wall, say so and ask the user to sign in rather than working around
+   it.
 5. Read the whole match, every game, before commenting on any of it. A turn-3 decision
    often only looks wrong once you know what was in the deck.
 
@@ -160,6 +179,30 @@ Do not guess at a card from a blurry image. Ask, or say which card you couldn't 
 
 ---
 
+### Reviewing a batch
+
+A profile link, a deck link or "review my games from last night" is a batch, not a
+match. The steps are the same; the order and the budget change.
+
+1. **Enumerate and agree the scope first.** List the matches with `untapped_log.py
+   matches`, then ask which slice: one session, one deck, the losses, or everything
+   constructed since a date. Draft and sealed are out unless asked for.
+2. **Read everything before asking anything.** Parse every match, then do pass one
+   per match: the keep for every game, the boarding, the turn each loss was lost, and
+   up to three candidate decisions with a tentative grade. A batch big enough to split
+   goes to subagents by deck, each told the governing rule (judge on the information
+   at the time) and to return candidates, not verdicts.
+3. **Pick the questions across the whole batch.** Losses first, then the candidates
+   most likely to be punts, then anything that repeats across matches, since one
+   repeated habit is worth more than six one-offs. Twelve questions in total at most,
+   three per match at most, in one round. A card that keeps beating the player across
+   matches gets one question for the batch, not one per match.
+4. **Interview after the read, grade after the interview.** Every grade stays
+   tentative until the answer is in, the same as a single match. Matches days old
+   will draw "I don't remember" more often; record it and grade the line on its merits.
+5. **One review note per batch**, grouped by deck, with every kept hand in a table at
+   the end. One ledger row per game, as always.
+
 ## Step 2: Establish what each player was playing
 
 Before any judgement, name both decks. A line that's wrong against Dimir Midrange is
@@ -171,10 +214,18 @@ which one you were facing.
 2. Name the opponent's deck from what they revealed, unless the user already told
    you. If the cards don't resolve to a known archetype, hand it to `deck-check`
    rather than inventing a name.
-3. Pull the archetype note from
+3. **Use the meta's names, for both decks.** The user's deck gets an archetype name
+   too, not the title it has in their client ("New Deck (5)", "Spidey Control"). In
+   order: `archetype_names.json` (the canonical list), then
+   `archetype_vocabulary.json` (MTGGoldfish's names and defining cards), then
+   untapped's archetype names for Arena-only shells ("Jeskai Superfriends", "Mono-Blue
+   Jace"). Only when none fits does a deck go in as `Unnamed (<five-word shell>)`, and
+   it goes to `deck-check` in the same breath. The profile splits on these names, so
+   one deck under two names is two decks with half a record each.
+4. Pull the archetype note from
    `skills/mtg-tournament-analysis/reference/archetypes/` for both. That's where the
    game plan, the key cards, and the known matchup numbers live.
-4. **Check the era.** Run `python mtg_era.py`. A review of a game from a dead format
+5. **Check the era.** Run `python mtg_era.py`. A review of a game from a dead format
    is a history lesson, which is fine, and it should say so. A matchup number quoted
    from before a ban is not fine.
 
@@ -321,11 +372,27 @@ reasons:
   "what am I actually keeping against this deck" with a count instead of an
   impression. `python play_profile.py --hands` prints it.
 
-Classify the hand on what was knowable at the keep (`shape`), and record what the draw
-did afterwards (`outcome`) as a separate field. Keeping those apart is what stops a
-hand being graded by how it turned out: `lands-and-spells` that came out `screwed` is
+**Record what the hand was made of, not just lands and spells.** `composition` puts
+every card in one slot: `lands`, `threats`, `interaction`, `card_advantage`, `other`.
+`untapped_log.py` suggests a split from card types and rules text; check it, because a
+card that does two jobs goes where the deck uses it (Deceit cast for its triggers is
+interaction). The `shape` follows from the composition and the script derives it, so
+leave `shape` out unless the hand had `no-early-play`, the one shape a count can't see.
+
+Record what the draw did afterwards (`outcome`) as a separate field, and set it from
+the draws: an untapped log has every one, so `unknown` there is a gap in the review.
+`neither` means the mana worked. Keeping shape and outcome apart is what stops a hand
+being graded by how it turned out: a `balanced` keep that came out `screwed` is
 variance, `land-light` that came out `neither` is still a bad keep that got bailed
 out. Both vocabularies are fixed and live in `reference/play-profile.md`.
+
+**Note every decision that spent life, and say whether it cost the game.** Paying 3
+for Bitter Triumph with a spare land in hand, a shock land untapped, casting Stock Up
+and taking the big attack: all of it is the life total used as a resource. Usually
+right. The finding carries `"life": {"spent": N, "cost_the_game": true|false}`
+whatever its pattern, and a decision whose whole question was the payment goes under
+`spends-life-as-a-resource`. The profile's Life total section counts how often the
+life spent was the margin.
 
 **Note the pace tells as you read, and measure pace if the source lets you.** A VOD
 gives real seconds per turn from the timestamps. Untapped gives each game's
@@ -395,8 +462,8 @@ to distrust the review.
 
 - **Batch the questions into one round.** Ask all of them at once, then grade. A
   turn-by-turn interrogation across ten messages gets abandoned halfway.
-- **Cap it at three questions per match.** More than that and the review stops being
-  worth the time it costs.
+- **Cap it at three questions per match**, and twelve across a batch. More than that
+  and the review stops being worth the time it costs.
 - **Use the multiple-choice tool where the options are enumerable** (which card were
   you playing around, was this in the picture yes or no) and plain text where the
   answer is a read.

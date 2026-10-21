@@ -91,8 +91,30 @@ Three rules, all hard:
 
 ```
 mulligan · play-draw · land-sequencing · mana-holding · trading ·
-removal-timing · combat-math · sideboarding · lost-turn · rules-error
+removal-timing · combat-math · sideboarding · lost-turn · rules-error ·
+life-total
 ```
+
+`life-total` was added 2026-10-17. Its one pattern, `spends-life-as-a-resource`,
+covers decisions whose whole question is a life payment: Bitter Triumph's 3
+life against a discard, a shock land untapped, Starting Town.
+
+### Life spent, on any finding
+
+Taking a big attack to cast Stock Up is a mana-holding decision and a life
+decision at once. One decision is one finding, so the life part rides along as
+an optional field rather than a second finding:
+
+```json
+"life": {"spent": 7, "cost_the_game": true}
+```
+
+`spent` is the life the decision gave up: the payment, or the damage the other
+line would have prevented. `cost_the_game` is true when that life was the margin
+the game was lost by, and it has to be true or false; an unknown is the one
+number the section counts. The profile's **Life total** section lists every
+such decision and says how many cost the game. Spending life is usually right,
+so the count that matters is the last one.
 
 `polarity` is one of:
 
@@ -298,16 +320,41 @@ four seconds and then it's gone into the rest of the game.
 | `kept_at` | Cards kept: 7 for a no-mulligan keep, 6 after one, and so on. `cards` has to be this long |
 | `lands` | Lands in the kept hand. Required. Count MDFC land backs and say so in `note` |
 | `cards` | The hand, card for card, in Scryfall spelling |
-| `shape` | What kind of hand it was, from the fixed list below |
+| `composition` | What the hand was made of: `lands`, `threats`, `interaction`, `card_advantage`, `other`. Every card in exactly one slot, so they sum to `kept_at` and `lands` agrees |
+| `shape` | What kind of hand it was. Derived from `composition` when that is present; leave it out and the script fills it in |
 | `outcome` | What the draw did afterwards, from the fixed list below |
 | `note` | Optional. One line: what the hand needed, and whether it got it |
 
-**`shape` is judged on what was knowable at the keep.** From this list:
+**`composition` says what the spells were.** "Lands and spells" told nobody
+whether the spells were threats, answers or card draw, and those are different
+keeps. The slots:
+
+| Slot | What goes in it |
+|---|---|
+| `threats` | Creatures, planeswalkers, anything that wins if left alone |
+| `interaction` | Removal, counters, discard, bounce, sweepers |
+| `card_advantage` | Draw, selection, card-flow engines |
+| `other` | Mana rocks and anything that is none of the above |
+
+A card that does two jobs goes where the deck uses it. Deceit in a deck that
+casts it for the bounce and the discard is interaction. `untapped_log.py`
+suggests a split from card types and rules text; the reviewer checks it and owns
+the count.
+
+**`shape` follows from the composition.** From this list:
 
 ```
-lands-and-spells · interaction-heavy · threat-heavy · land-light ·
-land-heavy · no-early-play · unknown
+balanced · interaction-heavy · threat-heavy · card-advantage-heavy ·
+land-light · land-heavy · no-early-play · lands-and-spells · unknown
 ```
+
+The rule `play_profile.derive_shape` applies: one land or none is `land-light`;
+four or more lands with two spells or fewer is `land-heavy`; otherwise a slot
+holding over half the spells names the shape, and `balanced` when none does.
+`no-early-play` needs a judgement about mana costs that a count can't make, so
+it is the one shape a reviewer can record over a composition. Any other recorded
+shape that disagrees with the composition is reported. `lands-and-spells` is
+legacy, for rows written before `composition` existed.
 
 **`outcome` is what happened afterwards**, kept separate on purpose:
 
@@ -315,8 +362,12 @@ land-heavy · no-early-play · unknown
 screwed · flooded · neither · unknown
 ```
 
+`neither` means the mana worked: no screw, no flood. `unknown` means nobody
+checked. A review from an untapped log has every draw, so `unknown` there is a
+gap in the review, not in the source; set the outcome from the draws.
+
 Splitting the two is what stops outcome bias getting into the mulligan grade. A
-hand can be `lands-and-spells` and still come out `screwed`, and that combination
+hand can be `balanced` and still come out `screwed`, and that combination
 is a variance note, not a punt. `land-light` that came out `neither` is a keep
 that got bailed out, and it stays a bad keep.
 
@@ -339,8 +390,9 @@ bring in against what, how often, and with what record behind it. That's the raw
 material for noticing a card that comes in every time and never does anything.
 
 **Build the lists by diffing the decklists in the log, not from memory.** The two
-lists are the same length by arithmetic: a deck keeps its size. **Every run
-checks it now**, in both directions, because this rule sat here from 1.12.0
+lists are the same length by arithmetic unless the deck changed size. 60 to 61
+is legal and happens: record it as `"size_change": 1`, read off the decklists,
+and the check balances against that. **Every run checks it now**, in both directions, because this rule sat here from 1.12.0
 enforced by nothing and a test actually pinned the opposite, asserting that 2 in
 against 1 out validated clean. A live ledger row then carried 9 in against 7 out
 on both post-board games of one match, which no 60-card deck can do.

@@ -36,6 +36,10 @@ archive/
 # Transcripts — large, personal
 transcripts/
 
+# Arena match logs pulled by untapped_log.py. The user's own games, and the
+# opponents' names are in them.
+untapped_logs/
+
 # Comprehensive Rules cache, downloaded by rules_lookup.py. About 1 MB, and it
 # is superseded with every set release, so a committed copy is a stale copy.
 # The .version stamp goes with it: a stamp without its document makes

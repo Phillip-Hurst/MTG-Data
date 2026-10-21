@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.21.0 - 2026-10-17
+
+Batch reviews, and three things a 26-match review on 2026-10-17 needed that the
+ledger had no way to say.
+
+### `untapped_log.py`: batch vod-review without a browser
+
+Both untapped endpoints answered without a sign-in, from a guest browser and from
+plain HTTP. `untapped_log.py matches` lists a player's games in a set, `fetch`
+pulls the upload logs with a 429 backoff and skips what it already has, and
+`parse` writes a turn-by-turn play-by-play plus a per-game JSON: every hand
+offered, the kept hand with a suggested composition and outcome, seconds per
+turn, and the boarding diff. Logs go to `untapped_logs/`, which is gitignored and
+excluded from the bundle: they are the user's games and carry opponents' names.
+`vod-review/SKILL.md` gains a "Reviewing a batch" section: enumerate and agree the
+scope, read everything, pick at most twelve questions across the batch, interview
+after the read, grade after the interview.
+
+### Life total
+
+New kind `life-total` with one pattern, `spends-life-as-a-resource`, and an
+optional `life: {spent, cost_the_game}` on any finding. Casting Stock Up into a
+big attack is a mana decision and a life decision at once, so the life part rides
+on the finding instead of becoming a second one. The profile gets a Life total
+section that says how often the life spent was the margin.
+
+### Hand composition
+
+`hand.composition` splits the kept hand into lands, threats, interaction, card
+advantage and other. `shape` is now derived from it (`derive_shape`), with new
+shapes `balanced` and `card-advantage-heavy`; `lands-and-spells` stays for old
+rows. The profile prints the mean composition for blind keeps, post-board keeps,
+and hands kept in wins and losses.
+
+### Boarding to 61
+
+`sideboard.size_change` records a deck that grew between games. Two real boards
+went to 61 on 2026-10-17 and were set aside as miscounted. The same re-diff off
+the untapped log closed the oldest open problem: the 2026-09-01 Izzet
+Spellementals rows had the wrong out-list (Pyrrhic Strike for Get Lost and two
+Three Steps Ahead). The ledger now validates with no problems.
+
+### Era
+
+Reality Fracture added to `set_releases.json` (Arena release 2026-09-29). The
+card pool predated it, so `validate_events.py` had quarantined a real Reality
+Fracture RCQ as off-format; the pool is refreshed. The Hobbit era test is pinned
+to the sets on file at the time, and a new test pins Reality Fracture as current.
+The mtg-tournament-analysis SKILL.md no longer states the era as a fact.
+
+### Meta names
+
+`vod-review` names both decks with the meta's names, the user's own included: the
+canonical list, then MTGGoldfish's vocabulary, then untapped's archetype names,
+and `Unnamed (<shell>)` plus a `deck-check` handoff only when none fits.
+
 ## 1.20.0 - 2026-09-08
 
 Four fixes from a pre-ship review. The pool stopped shrinking, the matchup layer

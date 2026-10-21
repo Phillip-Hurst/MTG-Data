@@ -269,6 +269,8 @@ def test_package_excludes_data_logs_tests_and_vault_notes():
         "play_log_standard.jsonl",
         "tests/test_plugin_structure.py",
         "transcripts/anything.md",
+        "untapped_logs/PLACEHOLDER0000.json",
+        "untapped_logs/_cards/cards.json",
         "baselines/meta_baseline_standard.json",
         "archive/through-2026-08-10/manifest.json",
         "__pycache__/mtg_stats.cpython-313.pyc",
