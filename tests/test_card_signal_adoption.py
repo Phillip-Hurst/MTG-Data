@@ -11,14 +11,12 @@ reporting half and pin the boundary: `cards` and `counts` stay mainboard, so the
 lenses that predate this behave exactly as they did.
 """
 import os
-import sys
 
 import pytest
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, SCRIPT_DIR)
+from mtg_data.analyze import card_signal as cs
 
-import card_signal as cs  # noqa: E402
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def deck(week_date, main=None, side=None, player="p", archetype="Placeholder A",
@@ -224,7 +222,7 @@ def test_the_renderer_says_when_attributes_are_missing():
              field("2026-08-17", 20, side={"flashfreeze": 2}, start=20))
     text = cs.render(decks, 8.0, ["adoption"], 3, 15, None,
                      opts={"board": "side", "attrs": {}})
-    assert "build_card_pool.py" in text
+    assert "build-card-pool" in text
 
 
 # ── per archetype ─────────────────────────────────────────────────────────────

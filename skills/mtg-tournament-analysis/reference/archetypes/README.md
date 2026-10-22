@@ -11,7 +11,7 @@ melee and MTGO. Shipping someone else's are worse than useless once the format m
 and an end user needs none of them to run the plugin. So the plugin carries the
 vocabulary and none of the content.
 
-**`archetype_names.json` at the repo root is the canonical vocabulary.** Every source
+**`config/archetype_names.json` is the canonical vocabulary.** Every source
 names decks differently: melee lets players type whatever they want, mtgtop8 has its
 own house style, MTGO publishes nothing at all. Pick any one of them and the same deck
 lands under three labels, which splits its win rate three ways and makes the matchup
@@ -26,7 +26,7 @@ Spellementals" was the real name.
 
 `mtg-tournament-analysis` Step 5 writes a note here after any session that produces
 matchup data. `deck-check` writes one when it names a new archetype, and adds the name
-to `archetype_names.json` in the same move. `vod-review` adds cards and interactions it
+to `config/archetype_names.json` in the same move. `vod-review` adds cards and interactions it
 verified while reviewing a game, and may add a clearly-labelled personal-experience
 section that never counts as data.
 
@@ -50,7 +50,7 @@ is worse than a short one: it reads as authoritative and isn't. Where a card has
 been verified, say so in the note rather than guessing.
 
 A new archetype earns a note when it's a real deck rather than a spread of brews.
-`card_signal.py --lens unnamed` finds the candidates: a group sharing a core, with a
+`card-signal --lens unnamed` finds the candidates: a group sharing a core, with a
 pilot count and a finishing record.
 
 ## Two kinds of section, and the precedence between them
@@ -74,6 +74,6 @@ card was blank — and nothing more.
 
 ## These notes stay local
 
-`.gitignore` keeps `[C] *.md` in this folder out of the repo, and `package.py` keeps
+`.gitignore` keeps `[C] *.md` in this folder out of the repo, and `scripts/build_plugin.py` keeps
 them out of the bundle. They're your working notes about your metagame. Nothing here
 needs to travel.

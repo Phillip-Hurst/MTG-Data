@@ -18,7 +18,7 @@ import os
 
 import pytest
 
-import mtg_stats
+from mtg_data.core import stats as mtg_stats
 
 
 def row(**kw):
@@ -112,6 +112,7 @@ def _live_pairings_files():
     return [p for p in set(files) if not os.path.basename(p).endswith("_all_pairings.csv")]
 
 
+@pytest.mark.local_data
 def test_live_data_invariants():
     files = _live_pairings_files()
     if not files:
@@ -137,6 +138,8 @@ def test_live_data_invariants():
             d1, d2, outcome = c
             if outcome == "draw":
                 draws += 1
+                continue
+            if outcome == "mirror":
                 continue
             decided += 1
             a, b = (d1, d2) if outcome == "p1" else (d2, d1)
@@ -164,3 +167,36 @@ def test_live_data_invariants():
         if n:
             assert 0.0 <= mtg_stats.win_pct(aw, bw) <= 100.0
             assert aw <= n
+
+
+# ── Uncertainty on a win rate ─────────────────────────────────────────────────
+
+def test_wilson_interval_matches_the_textbook_values():
+    # 8 of 10: the standard worked example, 0.490 to 0.943
+    lo, hi = mtg_stats.wilson_interval(8, 2)
+    assert round(lo, 1) == 49.0 and round(hi, 1) == 94.3
+
+
+def test_wilson_interval_at_the_matchup_floor_is_wide():
+    """Ten decided games at 60% can't tell a good matchup from a bad one."""
+    lo, hi = mtg_stats.wilson_interval(6, 4)
+    assert lo < 50 < hi
+    assert round(lo) == 31 and round(hi) == 83
+
+
+def test_wilson_interval_stays_inside_0_to_100():
+    assert mtg_stats.wilson_interval(10, 0)[1] == 100.0
+    assert mtg_stats.wilson_interval(0, 10)[0] == 0.0
+    lo, hi = mtg_stats.wilson_interval(10, 0)
+    assert lo > 70, "a perfect record over 10 games is still not proof of 100%"
+
+
+def test_wilson_interval_with_nothing_decided_claims_nothing():
+    assert mtg_stats.wilson_interval(0, 0) == (0.0, 100.0)
+
+
+def test_wilson_interval_narrows_as_the_sample_grows():
+    small = mtg_stats.wilson_interval(11, 9)
+    large = mtg_stats.wilson_interval(110, 90)
+    # ten times the games, roughly a third of the width (it scales with 1/sqrt(n))
+    assert (large[1] - large[0]) < (small[1] - small[0]) / 2.5

@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mtg-data"
+dynamic = ["version"]
+description = "Magic: The Gathering tournament results, from the scrape to a meta read you can audit."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Phillip Hurst" }]
+requires-python = ">=3.10"
+# Playwright drives a real browser for melee.gg and MTGO. Everything else is the
+# standard library, on purpose: the plugin runs on whatever Python a player has.
+dependencies = ["playwright>=1.40"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.6"]
+
+[project.scripts]
+mtg = "mtg_data.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Phillip-Hurst/MTG-Data"
+Changelog = "https://github.com/Phillip-Hurst/MTG-Data/blob/main/CHANGELOG.md"
+
+[tool.setuptools.dynamic]
+version = { attr = "mtg_data.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "local_data: reads the author's scraped data from the checkout root or MTG_DATA_DIR; skips on a fresh clone",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["archive", "transcripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "SIM", "RUF100"]
+ignore = [
+    "UP031",   # %-formatting is used deliberately in a few report builders
+    "SIM105",  # try/except/pass reads more plainly than contextlib.suppress here
+    "SIM108",  # ternaries are not always clearer
+]
+
+[tool.ruff.lint.per-file-ignores]
+"mtg.py" = ["E402"]
+"scripts/setup_workspace.py" = ["E402"]
+"tests/*" = ["SIM115"]
+# Report builders: each long line is one sentence of the generated note, kept whole
+# so the prose can be read and edited as written.
+"src/mtg_data/analyze/update_archetypes.py" = ["E501"]
+"src/mtg_data/analyze/winrate_analysis.py" = ["E501"]  # fixtures are read inline; the files are tiny and short-lived
+
+[tool.ruff.lint.isort]
+known-first-party = ["mtg_data"]

@@ -10,14 +10,12 @@ Measured 2026-09-08 on the full rebuilt pool (1,519 rows): distinct labels went
 122 to 104, 387 seats were relabelled, and cells at the floor went 8 to 14.
 """
 import os
-import sys
 
 import pytest
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, SCRIPT_DIR)
+from mtg_data.classify import deck_labels as dl
 
-import deck_labels as dl  # noqa: E402
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class FakeVerdict:

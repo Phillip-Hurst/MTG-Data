@@ -7,8 +7,7 @@ plaintext export, so the parsing logic is pinned without hitting the site.
 
 Run:  pytest          (from the skill folder)
 """
-import build_mtgtop8_baseline as b
-
+from mtg_data.ingest import build_mtgtop8_baseline as b
 
 # A trimmed but faithful mtgo decklist export (single-slash DFC, Sideboard split).
 DECKLIST = """\

@@ -16,9 +16,6 @@ None of the three raised anything. That is the point of this file.
 import json
 import os
 import re
-import sys
-
-import pytest
 
 
 def test_local_scrape_backups_never_ship():
@@ -28,10 +25,9 @@ def test_local_scrape_backups_never_ship():
     backups of local MTGO and melee scrapes were going into the public
     bundle, 2.7 MB of one person's data.
     """
-    import sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    import package
+
+    import build_plugin as package
 
     for name in ("melee_deck_cache.json.bak", "mtgo_classifications.json.bak",
                  "mtgo_challenge_latest.json.bak", "mtgo_5-0_latest.json.bak",
@@ -44,17 +40,19 @@ def test_local_scrape_backups_never_ship():
 
 
 def test_the_modules_every_consumer_imports_do_ship():
-    import sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    import package
 
-    for name in ("combine_events.py", "deck_labels.py", "card_signal.py",
-                 "build_card_pool.py", "play_profile.py"):
+    import build_plugin as package
+
+    for name in ("src/mtg_data/quality/combine_events.py",
+                 "src/mtg_data/classify/deck_labels.py",
+                 "src/mtg_data/analyze/card_signal.py",
+                 "src/mtg_data/ingest/build_card_pool.py",
+                 "src/mtg_data/review/play_profile.py",
+                 "src/mtg_data/core/stats.py", "src/mtg_data/cli.py", "mtg.py"):
         assert package.should_ship(Path(name)), f"{name} must ship"
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, SCRIPT_DIR)
 
 PLUGIN_JSON = os.path.join(SCRIPT_DIR, ".claude-plugin", "plugin.json")
 MARKETPLACE_JSON = os.path.join(SCRIPT_DIR, ".claude-plugin", "marketplace.json")
@@ -220,32 +218,38 @@ def test_package_ships_the_manifest_skills_and_the_name_manifest():
     called SKILL.md was dropped: every archetype note, and the manifest with
     them. The bundle still built and still installed. It was just wrong.
     """
-    import package
     from pathlib import Path
+
+    import build_plugin as package
 
     must_ship = [
         ".claude-plugin/plugin.json",
         "skills/mtg-tournament-analysis/SKILL.md",
         "skills/deck-check/SKILL.md",
         "skills/mtg-tournament-analysis/reference/archetypes/README.md",
-        "archetype_names.json",
+        "config/archetype_names.json",
         # deck-check names this as lookup 1. fetch_vocabulary.py shipped
         # without it up to 2026-09-08: the refresher present, the seed gone.
-        "archetype_vocabulary.json",
-        "mtg_stats.py",
-        "play_profile.py",
-        "set_releases.json",
-        "bans.json",
+        "config/archetype_vocabulary.json",
+        "config/play_patterns.json",
+        "src/mtg_data/core/stats.py",
+        "src/mtg_data/review/play_profile.py",
+        "config/set_releases.json",
+        "config/bans.json",
+        "mtg.py",
+        "scripts/setup_workspace.py",
+        "docs/data-quality.md",
         "README.md",
         "LICENSE",
     ]
     missing = [p for p in must_ship if not package.should_ship(Path(p))]
-    assert not missing, f"package.py would drop: {missing}"
+    assert not missing, f"build_plugin.py would drop: {missing}"
 
 
 def test_package_excludes_data_logs_tests_and_vault_notes():
-    import package
     from pathlib import Path
+
+    import build_plugin as package
 
     must_not_ship = [
         "melee_standard_all_pairings.csv",
@@ -258,7 +262,11 @@ def test_package_excludes_data_logs_tests_and_vault_notes():
         "probe_log.txt",
         "mtgdecks_fetch.py",
         "analyze_weekend.py",
-        "package.py",
+        "scripts/build_plugin.py",
+        "src/mtg_data/__pycache__/cli.cpython-313.pyc",
+        "config/archetype_refs.json",
+        "src/mtg_data/notes.md",
+        "melee_deck_cache.json",
         "CHANGELOG.md",
         ".claude-plugin/marketplace.json",
         "[C] MTGO Review Queue 2026-08-29.md",
@@ -276,7 +284,7 @@ def test_package_excludes_data_logs_tests_and_vault_notes():
         "__pycache__/mtg_stats.cpython-313.pyc",
     ]
     leaked = [p for p in must_not_ship if package.should_ship(Path(p))]
-    assert not leaked, f"package.py would ship: {leaked}"
+    assert not leaked, f"build_plugin.py would ship: {leaked}"
 
 
 def test_package_required_set_covers_the_archetype_names():
@@ -285,18 +293,19 @@ def test_package_required_set_covers_the_archetype_names():
     label resolves onto, so a bundle without it installs and then merges
     nothing. The build has to fail instead.
     """
-    import package
     from pathlib import Path
+
+    import build_plugin as package
 
     assert "archetype names" in package.REQUIRED
     match = package.REQUIRED["archetype names"]
-    assert match(Path("archetype_names.json"))
+    assert match(Path("config/archetype_names.json"))
     assert not match(Path("skills/mtg-tournament-analysis/SKILL.md"))
 
 
 def test_the_archetype_names_manifest_is_on_disk_and_populated():
-    path = os.path.join(SCRIPT_DIR, "archetype_names.json")
-    assert os.path.exists(path), "archetype_names.json is missing"
+    path = os.path.join(SCRIPT_DIR, "config", "archetype_names.json")
+    assert os.path.exists(path), "config/archetype_names.json is missing"
     with open(path, encoding="utf-8") as fh:
         names = json.load(fh)["names"]
     assert len(names) >= 20 and all(isinstance(n, str) and n.strip()
@@ -308,8 +317,9 @@ def test_archetype_working_notes_stay_out_of_the_bundle():
     The notes are one person's metagame reading. An end user needs the names,
     not the notes, and the repo is public.
     """
-    import package
     from pathlib import Path
+
+    import build_plugin as package
 
     note = Path("skills/mtg-tournament-analysis/reference/archetypes/"
                 "[C] Izzet Prowess.md")
