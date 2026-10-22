@@ -60,7 +60,7 @@ from mtg_data.classify import refs_store
 # so reference keys never diverge between builders.
 from mtg_data.classify.classify_decks import build_ref_from_decks
 from mtg_data.core import era as _era
-from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.paths import default_data_dir
 from mtg_data.ingest import build_card_pool
 from mtg_data.quality import validate_events as ve
 
@@ -71,7 +71,7 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR = default_data_dir()
 
 
 # MTG format name -> mtgtop8 format code. Matches setup_workspace.py's KNOWN_FORMATS.

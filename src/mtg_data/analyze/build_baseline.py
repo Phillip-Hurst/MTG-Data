@@ -56,7 +56,7 @@ from datetime import date, datetime, timedelta
 
 from mtg_data.classify import deck_labels
 from mtg_data.core import era as mtg_era
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from mtg_data.core.paths import default_data_dir
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
 # characters in deck and player names. Force UTF-8 where the stream supports it.
@@ -68,21 +68,14 @@ for _stream in (sys.stdout, sys.stderr):
 
 # Data is read from MTG_DATA_DIR (defaults to the checkout root, the flat
 # single-format workflow). setup_workspace.py points it at a per-format folder.
-DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR = default_data_dir()
 
-
-def _find_config(name):
-    """Look in the data folder first, fall back to the versioned copy in
-    config/. Lets each format carry its own set_releases.json without forcing it."""
-    p = os.path.join(DATA_DIR, name)
-    return p if os.path.exists(p) else os.path.join(CONFIG_DIR, name)
 
 
 # Combined standings file is tagged by format (melee_scraper.py writes it that
 # way) so formats never share a filename.
 _FMT_SLUG = (os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard").lower()
 STANDINGS = os.path.join(DATA_DIR, f"melee_{_FMT_SLUG}_all_standings.csv")
-SET_RELEASES = _find_config("set_releases.json")
 BASELINE_DIR = os.path.join(DATA_DIR, "baselines")
 
 # Kept as a re-export: the junk-name filter now lives at the point of
@@ -95,9 +88,7 @@ def slugify(name):
 
 
 def current_set():
-    with open(SET_RELEASES, encoding="utf-8") as f:
-        data = json.load(f)
-    sets = [s for s in data.get("sets", []) if s.get("release_date")]
+    sets = [s for s in mtg_era.load_sets() if s.get("release_date")]
     if not sets:
         sys.exit("set_releases.json has no sets with release dates.")
     sets.sort(key=lambda s: s["release_date"])

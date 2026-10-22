@@ -36,9 +36,9 @@ import re
 import sys
 from datetime import datetime, timedelta
 
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from mtg_data.core.paths import CONFIG_DIR, default_data_dir
 
-DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR = default_data_dir()
 
 # A ban and a set release this close together are one format reset. Splitting
 # them produces a second era only a few days long, and drops the results that
@@ -83,8 +83,7 @@ def slugify(name):
     return re.sub(r"[^a-z0-9]+", "-", str(name).lower()).strip("-")
 
 
-def _load(name, key):
-    path = find_config(name)
+def _read_entries(path, key):
     if not os.path.exists(path):
         return []
     try:
@@ -94,6 +93,31 @@ def _load(name, key):
         print(f"  ! couldn't read {os.path.basename(path)} ({e}) — ignoring it.",
               file=sys.stderr)
         return []
+
+
+def _entry_key(entry):
+    if not isinstance(entry, dict):
+        return json.dumps(entry, sort_keys=True)
+    if "release_date" in entry or "code" in entry:
+        return ("set", (entry.get("code") or entry.get("name") or "").lower())
+    return ("ban", entry.get("effective"), (entry.get("format") or "").lower())
+
+
+def _load(name, key):
+    """The shipped list in config/, plus whatever a data folder adds.
+
+    Until 2.0.0 a copy in the data folder replaced the shipped one outright,
+    and setup put a copy of set_releases.json in every format's folder. So a
+    workspace set up in August never heard about a set released in September,
+    and its era never moved. Now both are read: an entry the data folder
+    carries wins over the shipped entry with the same set code (or the same
+    ban date and format), and every other shipped entry still counts.
+    """
+    merged = {}
+    for path in (os.path.join(CONFIG_DIR, name), os.path.join(DATA_DIR, name)):
+        for entry in _read_entries(path, key):
+            merged[_entry_key(entry)] = entry
+    return list(merged.values())
 
 
 def load_sets():

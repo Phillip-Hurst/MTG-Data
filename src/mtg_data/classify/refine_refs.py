@@ -44,10 +44,10 @@ import sys
 
 from mtg_data.classify import classifier, refs_store
 from mtg_data.classify import classify_decks as cd
-from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.paths import default_data_dir
 from mtg_data.core.stats import normalize
 
-DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR = default_data_dir()
 REFS_FILE = os.path.join(DATA_DIR, "archetype_refs.json")
 CACHE_FILE = os.path.join(DATA_DIR, "melee_deck_cache.json")
 

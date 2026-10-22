@@ -39,14 +39,14 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 
 
 from mtg_data.classify import classifier, refs_store
-from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.paths import default_data_dir, default_output_dir
 
 # Data is read from MTG_DATA_DIR (defaults to the checkout root, the flat
 # single-format workflow). setup_workspace.py sets it per format.
-DATA_DIR     = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR     = default_data_dir()
 # Review queue written next to the data by default.
 # Set MTG_OUTPUT_DIR to write it elsewhere (e.g. your vault project folder).
-_PROJECT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
+_PROJECT_DIR = default_output_dir()
 
 REFS_FILE     = os.path.join(DATA_DIR, "archetype_refs.json")
 CLASS_FILE    = os.path.join(DATA_DIR, "mtgo_classifications.json")

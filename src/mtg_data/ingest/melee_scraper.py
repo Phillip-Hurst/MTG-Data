@@ -32,6 +32,7 @@ from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
 from mtg_data.core.paths import ROOT_DIR, resolve_data_dir, resolve_output_dir
+from mtg_data.ingest.browser import launch as launch_browser
 from mtg_data.quality import combine_events
 
 # Windows consoles default to cp1252 and choke on the ✓/✗/→ and accented
@@ -655,10 +656,7 @@ def main():
 
     with sync_playwright() as pw:
         # melee.gg 403s headless browsers (2026-06-10) — must run headful Chrome.
-        try:
-            browser = pw.chromium.launch(channel="chrome", headless=False)
-        except Exception:
-            browser = pw.chromium.launch(headless=False)
+        browser = launch_browser(pw, headless=False)
         ctx = browser.new_context(
             viewport={"width": 1440, "height": 900},
         )

@@ -56,9 +56,12 @@ import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 
-from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.paths import default_data_dir
 
-DEFAULT_DIR = os.path.join(ROOT_DIR, "untapped_logs")
+# Beside the format's other scraped data: the checkout root in the flat
+# workflow, the workspace's scrapes folder once setup has run. An installed
+# plugin's own folder is replaced on every update, so logs can't live there.
+DEFAULT_DIR = os.path.join(default_data_dir(), "untapped_logs")
 API = "https://api.mtga.untapped.gg/api/v1"
 CARDS_URL = "https://mtgajson.untapped.gg/v1/latest/cards.json"
 LOC_URL = "https://mtgajson.untapped.gg/v1/latest/loc_en.json"

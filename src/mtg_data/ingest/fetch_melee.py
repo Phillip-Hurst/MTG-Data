@@ -37,7 +37,15 @@ from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
 from mtg_data.core import era as mtg_era
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir, resolve_output_dir, subprocess_env
+from mtg_data.core.paths import (
+    CONFIG_DIR,
+    ROOT_DIR,
+    default_data_dir,
+    resolve_data_dir,
+    resolve_output_dir,
+    subprocess_env,
+)
+from mtg_data.ingest.browser import launch as launch_browser
 
 # Scheduled-task console is cp1252; box-drawing chars in prints crash it.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -52,7 +60,7 @@ MELEE_ID_RE        = re.compile(r'/Tournament/View/(\d+)', re.IGNORECASE)
 # Data is written to MTG_DATA_DIR (defaults to the checkout root, the flat
 # single-format workflow). setup_workspace.py sets it per format, and it
 # propagates to the melee_scraper.py subprocess via the inherited environment.
-DATA_DIR           = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR           = default_data_dir()
 
 
 def _find_config(name):
@@ -809,10 +817,7 @@ def main():
         # melee.gg's bot protection 403s every headless mode (probed 2026-06-10);
         # only real headful Chrome gets through. Spoofed UA removed for the same
         # reason — a mismatched fingerprint makes the block more likely.
-        try:
-            browser = pw.chromium.launch(channel="chrome", headless=False)
-        except Exception:
-            browser = pw.chromium.launch(headless=False)
+        browser = launch_browser(pw, headless=False)
         ctx = browser.new_context(
             viewport={"width": 1440, "height": 900},
         )

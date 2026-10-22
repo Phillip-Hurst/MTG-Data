@@ -40,7 +40,7 @@ import sys
 from datetime import datetime
 
 from mtg_data.core import era as mtg_era
-from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.paths import default_data_dir
 
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -48,7 +48,7 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR = default_data_dir()
 
 # Globs relative to DATA_DIR. Order matters only for readability.
 MOVE_GLOBS = [

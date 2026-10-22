@@ -86,6 +86,27 @@ def resolve_output_dir(fmt, base_dir=ROOT_DIR):
     return base_dir
 
 
+def _default_format():
+    return (os.environ.get("MTG_FORMAT") or "Standard").strip() or "Standard"
+
+
+def default_data_dir():
+    """The data folder for a module that needs one before it parses --format.
+
+    Same order as resolve_data_dir, for MTG_FORMAT or Standard. Until 2.0.0
+    half the modules read MTG_DATA_DIR and otherwise fell straight back to the
+    checkout, skipping the workspace manifest. Run by hand from a workspace
+    made by setup, winrate-analysis looked in the checkout and found nothing,
+    while card-signal, one command over, found the data.
+    """
+    return resolve_data_dir(_default_format(), ROOT_DIR)
+
+
+def default_output_dir():
+    """The output folder, resolved the same way as default_data_dir."""
+    return resolve_output_dir(_default_format(), ROOT_DIR)
+
+
 def config_path(name, *search_first):
     """A shipped config file, unless a folder searched first carries its own.
 

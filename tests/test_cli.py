@@ -117,3 +117,36 @@ def test_a_missing_config_folder_stops_every_command(monkeypatch, capsys):
     monkeypatch.setattr(cli, "CONFIG_DIR", os.path.join(REPO_DIR, "no-such-folder"))
     assert cli.main(["era"]) == 2
     assert "pip install -e ." in capsys.readouterr().err
+
+
+def test_a_browser_that_will_not_start_says_what_to_install():
+    from mtg_data.ingest import browser
+
+    class Chromium:
+        def launch(self, **kwargs):
+            raise RuntimeError("Executable doesn't exist at /nowhere/chrome\nmore detail")
+
+    class PW:
+        chromium = Chromium()
+
+    with pytest.raises(SystemExit) as exc:
+        browser.launch(PW())
+    message = str(exc.value)
+    assert "playwright install chromium" in message
+    assert "Executable doesn't exist" in message
+
+
+def test_every_module_finds_a_setup_workspace_from_inside_it(tmp_path, monkeypatch):
+    """Run by hand from a workspace folder, with no MTG_* variables set, the
+    data folder comes from the manifest setup wrote. Before 2.0.0 half the
+    modules skipped the manifest and looked in the checkout instead."""
+    scrapes, insights = tmp_path / "Standard" / "scrapes", tmp_path / "Standard" / "insights"
+    scrapes.mkdir(parents=True)
+    insights.mkdir()
+    (tmp_path / "mtg_workspace.json").write_text(json.dumps({"formats": {"Standard": {
+        "scrapes": str(scrapes), "insights": str(insights)}}}), encoding="utf-8")
+    for var in ("MTG_DATA_DIR", "MTG_OUTPUT_DIR", "MTG_FORMAT"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.chdir(tmp_path / "Standard")
+    assert paths.default_data_dir() == str(scrapes)
+    assert paths.default_output_dir() == str(insights)

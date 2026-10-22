@@ -40,7 +40,15 @@ from datetime import datetime, timedelta
 from playwright.sync_api import TimeoutError as PWTimeout
 from playwright.sync_api import sync_playwright
 
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir, resolve_output_dir
+from mtg_data.core.paths import (
+    CONFIG_DIR,
+    ROOT_DIR,
+    default_data_dir,
+    default_output_dir,
+    resolve_data_dir,
+    resolve_output_dir,
+)
+from mtg_data.ingest.browser import launch as launch_browser
 
 # Scheduled-task console is cp1252; unicode in prints can crash it.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -49,7 +57,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 
 # Data written to MTG_DATA_DIR (defaults to the checkout root, the flat
 # single-format workflow). setup_workspace.py sets it per format.
-DATA_DIR     = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR     = default_data_dir()
 # Config is read from the data folder first, then the shipped copy.
 CONFIG_PATH  = (os.path.join(DATA_DIR, "mtg_config.json")
                 if os.path.exists(os.path.join(DATA_DIR, "mtg_config.json"))
@@ -60,7 +68,7 @@ OUT_LOG      = os.path.join(DATA_DIR, "mtgo_deck_log.csv")
 # Deck log note written next to the data by default.
 # Set the MTG_OUTPUT_DIR environment variable to write it elsewhere
 # (e.g. your Obsidian vault project folder).
-_OUTPUT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
+_OUTPUT_DIR = default_output_dir()
 VAULT_NOTE  = os.path.join(_OUTPUT_DIR, "mtgo_deck_log.md")
 
 # Primary: MTGO's own decklist site — format filter built into the URL.
@@ -801,7 +809,7 @@ def main():
             "Chrome/124.0.0.0 Safari/537.36"
         )
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=False)   # headed so you can watch
+            browser = launch_browser(pw, headless=False, prefer_chrome=False)  # headed so you can watch
             ctx = browser.new_context(user_agent=UA)
             page = ctx.new_page()
             page.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
@@ -840,7 +848,7 @@ def main():
     )
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        browser = launch_browser(pw, headless=True, prefer_chrome=False)
         ctx = browser.new_context(user_agent=UA)
         page = ctx.new_page()
 

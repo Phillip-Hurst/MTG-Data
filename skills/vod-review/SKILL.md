@@ -26,6 +26,27 @@ rather than assuming it is installed.
 
 ---
 
+## Running a command
+
+Commands here are written `python mtg.py <command>`. Pick the `mtg.py` that sits
+with the user's data:
+
+1. **A workspace from setup.** Find `mtg_workspace.json` (setup writes it at the
+   workspace root). Run `python "<skill_dir>/mtg.py" <command>` from inside the
+   format's folder, using the `skill_dir` path from that file, so every command
+   finds that format's data.
+2. **A clone with data in it.** Run its `mtg.py` from the clone's root.
+3. **Neither.** `python "${CLAUDE_PLUGIN_ROOT}/mtg.py" era` still works, because
+   it needs no local data. For anything else, say there's no local data yet and
+   point the user at `python scripts/setup_workspace.py` in a clone of the repo.
+   Don't scrape into the plugin's own folder: an update replaces it.
+
+A review itself needs no setup: a pasted log, a VOD or screenshots are enough.
+The play ledger does. With no workspace and no clone there's nowhere durable to
+append findings, so review the game, say the findings won't count toward a
+profile yet, and point at setup.
+
+---
 ## The rule that makes a review worth reading
 
 **Judge the decision on the information available when it was made.** Not on what the

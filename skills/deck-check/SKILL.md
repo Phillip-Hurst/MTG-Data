@@ -21,6 +21,22 @@ One job: get every deck under the right archetype name, and make that name the o
 
 ---
 
+## Running a command
+
+Commands here are written `python mtg.py <command>`. Pick the `mtg.py` that sits
+with the user's data:
+
+1. **A workspace from setup.** Find `mtg_workspace.json` (setup writes it at the
+   workspace root). Run `python "<skill_dir>/mtg.py" <command>` from inside the
+   format's folder, using the `skill_dir` path from that file, so every command
+   finds that format's data.
+2. **A clone with data in it.** Run its `mtg.py` from the clone's root.
+3. **Neither.** `python "${CLAUDE_PLUGIN_ROOT}/mtg.py" era` still works, because
+   it needs no local data. For anything else, say there's no local data yet and
+   point the user at `python scripts/setup_workspace.py` in a clone of the repo.
+   Don't scrape into the plugin's own folder: an update replaces it.
+
+---
 ## The loop
 
 ```

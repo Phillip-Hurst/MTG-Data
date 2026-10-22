@@ -11,7 +11,7 @@ import os
 import sys
 
 from mtg_data.classify import deck_labels
-from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.paths import default_data_dir, default_output_dir
 from mtg_data.core.stats import classify_row
 from mtg_data.quality import combine_events
 
@@ -25,8 +25,8 @@ for _stream in (sys.stdout, sys.stderr):
 
 # Scraped CSVs come from MTG_DATA_DIR (defaults to the checkout root); the
 # rendered matrix is written under MTG_OUTPUT_DIR. setup_workspace.py sets both per format.
-DATA_DIR   = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
-OUTPUT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
+DATA_DIR   = default_data_dir()
+OUTPUT_DIR = default_output_dir()
 OUT_TXT    = os.path.join(OUTPUT_DIR, "transcripts", "matchup_matrix.txt")
 # Format slug tags the combined CSVs so two formats never share a filename.
 FMT_SLUG   = (os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard").lower()

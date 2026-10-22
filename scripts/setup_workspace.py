@@ -203,17 +203,6 @@ def write_format_config(scrapes, fmt):
         json.dump(cfg, f, indent=2)
 
 
-def copy_set_releases(scrapes):
-    """Give each format its own copy of set_releases.json so set tracking is
-    independent. Only meaningful for Standard, harmless elsewhere."""
-    src = os.path.join(REPO_DIR, "config", "set_releases.json")
-    dst = os.path.join(scrapes, "set_releases.json")
-    if os.path.exists(src) and not os.path.exists(dst):
-        with open(src, encoding="utf-8") as f:
-            data = f.read()
-        with open(dst, "w", encoding="utf-8") as f:
-            f.write(data)
-
 
 def write_runners(fmt_dir, scrapes, insights, fmt):
     """Write scrape scripts that set the env vars and call the pipeline."""
@@ -274,12 +263,12 @@ def write_manifest(root, formats_meta):
 def seed_baselines(formats_meta):
     """Pull a starting metagame for each format from mtgtop8 (optional)."""
     hr()
-    print("Step 6 of 6  —  Seed archetype baselines from mtgtop8")
-    print("  mtgtop8 serves plain web pages, no browser needed, so we can pull a")
-    print("  starting metagame for each format now: the archetypes, their share,")
-    print("  and a modal decklist each. That gives the classifier something to")
-    print("  match against and the meta read a reference point before you've")
-    print("  scraped anything yourself.")
+    print("Step 6 of 6  —  Card pool from Scryfall, baselines from mtgtop8")
+    print("  Two downloads per format, no browser needed. Scryfall's list of legal")
+    print("  cards, which every scraped event is checked against. And mtgtop8's")
+    print("  current metagame: the archetypes, their share, and a modal decklist")
+    print("  each, so the classifier has something to match against before")
+    print("  you've scraped anything yourself.")
 
     # The builder's own list of supported formats is the source of truth.
     try:
@@ -289,24 +278,33 @@ def seed_baselines(formats_meta):
         supported = set(KNOWN_FORMATS)
 
     if not ask_yes_no("  Fetch baselines now (needs internet)?", default=True):
-        print("  Skipped. Seed any format later with:")
-        print("      python mtg.py build-mtgtop8-baseline --format Standard")
-        print("  (the format's scrape script sets MTG_DATA_DIR for you, or set it")
-        print("   to that format's scrapes folder first).")
+        mtg = os.path.join(REPO_DIR, "mtg.py")
+        print("  Skipped. Do it later from inside a format's folder, so the")
+        print("  workspace manifest routes the files there:")
+        print(f'      python "{mtg}" build-card-pool --format Standard')
+        print(f'      python "{mtg}" build-mtgtop8-baseline --format Standard')
         return
 
     for fmt, meta in formats_meta.items():
         if fmt not in supported:
             print(f"  {fmt}: no mtgtop8 baseline for this format — skipping.")
             continue
-        print(f"\n  {fmt}:")
+        print(f"\n  {fmt}:", flush=True)
         env = dict(os.environ, MTG_DATA_DIR=meta["scrapes"], MTG_FORMAT=fmt)
-        try:
-            subprocess.run([sys.executable, os.path.join(REPO_DIR, "mtg.py"),
-                            "build-mtgtop8-baseline", "--format", fmt],
-                           env=env, check=False)
-        except Exception as e:
-            print(f"  {fmt}: baseline step failed ({e}). Re-run it later.")
+        mtg = os.path.join(REPO_DIR, "mtg.py")
+        # The card pool first. The validator judges every scraped event against
+        # it, and the mtgtop8 seed uses it to keep off-format lists out of the
+        # references. Before 2.0.0 setup skipped it, so a fresh install's first
+        # scrape was validated on bans alone.
+        for step in (["build-card-pool", "--format", fmt],
+                     ["build-mtgtop8-baseline", "--format", fmt]):
+            try:
+                rc = subprocess.run([sys.executable, mtg, *step], env=env, check=False).returncode
+            except OSError as e:
+                rc = str(e)
+            if rc != 0:
+                print(f"  {fmt}: {step[0]} did not finish ({rc}). Re-run it later from "
+                      f"{meta['root']} with: python \"{mtg}\" {' '.join(step)}", flush=True)
 
 
 def main():
@@ -325,7 +323,6 @@ def main():
     for fmt in formats:
         fmt_dir, scrapes, insights = build_tree(root, fmt)
         write_format_config(scrapes, fmt)
-        copy_set_releases(scrapes)
         write_runners(fmt_dir, scrapes, insights, fmt)
         formats_meta[fmt] = {
             "root": fmt_dir,

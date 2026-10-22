@@ -46,11 +46,11 @@ from datetime import date
 
 from mtg_data.classify import classifier, refs_store
 from mtg_data.classify import classify_decks as cd
-from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.paths import default_data_dir, default_output_dir
 from mtg_data.ingest import fetch_vocabulary
 
-DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
-OUT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
+DATA_DIR = default_data_dir()
+OUT_DIR = default_output_dir()
 REFS_FILE = os.path.join(DATA_DIR, "archetype_refs.json")
 CACHE_FILE = os.path.join(DATA_DIR, "melee_deck_cache.json")
 

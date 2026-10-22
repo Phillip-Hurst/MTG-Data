@@ -24,7 +24,7 @@ import sys
 from datetime import datetime
 
 from mtg_data.classify import deck_labels
-from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.paths import default_data_dir, default_output_dir
 from mtg_data.core.stats import classify_row, wilson_interval, win_pct
 from mtg_data.quality import combine_events
 
@@ -39,10 +39,10 @@ for _stream in (sys.stdout, sys.stderr):
 # Data (the scraped CSVs) is read from MTG_DATA_DIR; defaults to the checkout
 # root, the flat single-format workflow. setup_workspace.py points this at a
 # per-format folder so formats don't cross-contaminate.
-DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR = default_data_dir()
 # Win-rate report written next to the data by default.
 # Set MTG_OUTPUT_DIR to write it elsewhere (e.g. your vault project folder).
-_OUTPUT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
+_OUTPUT_DIR = default_output_dir()
 VAULT_NOTE  = os.path.join(_OUTPUT_DIR, "melee_win_rate_tracker.md")
 # Format slug tags the rebuilt combined CSV so formats never share a filename.
 FMT_SLUG = (os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard").lower()

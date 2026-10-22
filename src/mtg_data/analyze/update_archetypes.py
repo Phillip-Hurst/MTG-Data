@@ -11,14 +11,14 @@ scrape. (Earlier versions carried a fixed May-12 write-up; that was removed
 import argparse
 import collections
 import glob
-import json
 import os
 import re
 import sys
 from datetime import datetime
 
 from mtg_data.classify import deck_labels
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from mtg_data.core import era as mtg_era
+from mtg_data.core.paths import default_data_dir, default_output_dir
 from mtg_data.core.stats import classify_row, wilson_interval, win_pct
 from mtg_data.quality import combine_events
 
@@ -32,27 +32,19 @@ for _stream in (sys.stdout, sys.stderr):
 
 # Scraped CSVs come from MTG_DATA_DIR (defaults to the checkout root, the flat
 # single-format workflow). setup_workspace.py sets it per format.
-DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
+DATA_DIR = default_data_dir()
 FORMAT = os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard"
 FMT_SLUG = FORMAT.lower()
 
-
-def _find_config(name):
-    p = os.path.join(DATA_DIR, name)
-    return p if os.path.exists(p) else os.path.join(CONFIG_DIR, name)
 
 
 def current_set_name():
     """Most recent set in set_releases.json. Used to title the Standard
     snapshot so it isn't frozen to one set. Falls back gracefully."""
-    try:
-        with open(_find_config("set_releases.json"), encoding="utf-8") as f:
-            sets = [s for s in json.load(f).get("sets", []) if s.get("release_date")]
-        if sets:
-            sets.sort(key=lambda s: s["release_date"])
-            return sets[-1]["name"]
-    except (OSError, ValueError, KeyError):
-        pass
+    sets = [s for s in mtg_era.load_sets() if s.get("release_date")]
+    if sets:
+        sets.sort(key=lambda s: s["release_date"])
+        return sets[-1]["name"]
     return None
 # Derive the project + archetype folders from this script's location instead of
 # hardcoding a username. The vault is laid out as:
@@ -63,7 +55,7 @@ def current_set_name():
 # Archetype files written to an archetypes/ subfolder by default.
 # Set MTG_OUTPUT_DIR to write them elsewhere (e.g. your vault project folder).
 # Phill's vault layout: MTG_OUTPUT_DIR = <vault>\02 Projects\MTG Tournament Analysis Skill
-PROJECT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
+PROJECT_DIR = default_output_dir()
 ARCH_DIR    = os.path.join(PROJECT_DIR, "Archetypes")
 
 MIN_DECK_GAMES = 10

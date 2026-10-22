@@ -22,6 +22,13 @@ rather than assuming it is installed.
 
 ---
 
+## Running a command
+
+`rules-lookup` needs no local data, so run the plugin's own copy from anywhere:
+`python "${CLAUDE_PLUGIN_ROOT}/mtg.py" rules-lookup <rule or --search term>`. In
+a clone of the repo, `python mtg.py rules-lookup` from its root does the same.
+
+---
 ## The hard rule
 
 **Never answer from memory. Quote the rule.**
