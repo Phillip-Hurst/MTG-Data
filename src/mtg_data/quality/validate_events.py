@@ -292,6 +292,11 @@ def read_csv(path):
     try:
         with open(path, newline="", encoding="utf-8") as f:
             return list(csv.DictReader(f))
+    except FileNotFoundError:
+        # Absent is not unreadable: before the first rebuild there is no
+        # combined file yet. Since unreadable now fails the run, the two can't
+        # share a branch.
+        return []
     except OSError as e:
         UNREADABLE.append((os.path.basename(path), str(e)))
         return []
