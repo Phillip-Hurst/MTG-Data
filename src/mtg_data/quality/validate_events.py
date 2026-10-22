@@ -206,9 +206,16 @@ def validate_event(tid, name, pairings_rows, cache, pool, banned):
             continue
         cards = deck_names(entry)
         is_legal, runs_banned, offenders = judge_deck(cards, pool, banned)
-        if is_legal is None:
+        if is_legal is None and pool is not None or not cards:
             unknown.append(player)
             continue
+        if is_legal is None:
+            # No card pool cached: legality can't be judged, bans still can.
+            # Until 2.0.0 these decks went to `unknown`, so with no pool the
+            # ban test never saw a single deck and a pre-ban event passed as
+            # unverified while the console said it had fallen back to the ban
+            # test. Count the deck as format-legal so the ban test runs.
+            is_legal = True
         if runs_banned:
             banned_players.append(player)
         (legal if is_legal else illegal).append(player)
@@ -868,13 +875,15 @@ def main():
 
     if bad or seats:
         print(f"\n{len(bad)} event(s) quarantined, {len(seats)} salvaged as a single seat.")
-        return 2
     if UNREADABLE:
         # An event nobody could read was never judged. Until 2.0.0 this run
-        # still printed "All events passed" and exited 0, so the pipeline
-        # carried on as if the pool were clean.
+        # still printed "All events passed" and exited 0 (or 2, when something
+        # else was quarantined), so the pipeline carried on as if the pool were
+        # clean. Unjudged beats quarantined: the caller has to stop.
         print(f"\nNot all events were judged: {len(UNREADABLE)} file(s) unreadable.")
         return 1
+    if bad or seats:
+        return 2
     print("\nAll events passed.")
     return 0
 

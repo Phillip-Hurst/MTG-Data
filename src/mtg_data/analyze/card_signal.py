@@ -232,7 +232,7 @@ def rogue_cards(decks, baseline, min_pilots):
         s["homes"] = homes.most_common(3)
         rows.append(s)
 
-    rows.sort(key=lambda r: (-r["beats_field_by"], -r["pilots"]))
+    rows.sort(key=lambda r: (-r["beats_field_by"], -r["pilots"], r["card"]))
     return rows
 
 
@@ -298,7 +298,7 @@ def deviations(decks, baseline, only_archetype=None):
                 "avg_copies": round(statistics.mean(
                     [d["counts"].get(card, 0) for d in holders]), 1),
             })
-    out.sort(key=lambda r: (-(r["delta"] or -99), -r["pilots"]))
+    out.sort(key=lambda r: (-(r["delta"] or -99), -r["pilots"], r["card"]))
     return out
 
 
@@ -342,7 +342,7 @@ def trend(decks, min_pilots):
             "early_n": e_count.get(card, 0),
             "late_n": l_count.get(card, 0),
         })
-    rows.sort(key=lambda r: -abs(r["delta"]))
+    rows.sort(key=lambda r: (-abs(r["delta"]), r["card"]))
     return rows, mid
 
 
@@ -440,7 +440,7 @@ def adoption(decks, board="side", min_pilots=DEFAULT_MIN_PILOTS, attrs=None):
             "type": (a.get("type_line") or "").split(" — ")[0],
             "cmc": a.get("cmc"),
         })
-    rows.sort(key=lambda r: -abs(r["move"]))
+    rows.sort(key=lambda r: (-abs(r["move"]), r["card"]))
     return rows, weeks, dropped
 
 
@@ -484,7 +484,7 @@ def archetype_adoption(decks, archetype, board="75", attrs=None):
             "colors": "".join(a.get("colors") or []) or ("C" if a else ""),
             "type": (a.get("type_line") or "").split(" — ")[0],
         })
-    rows.sort(key=lambda r: -r["move"])
+    rows.sort(key=lambda r: (-r["move"], r["card"]))
     return rows, weeks, dropped
 
 
@@ -510,7 +510,7 @@ def shell_candidates(decks, min_pilots):
         if s["field_share"] / 100 >= STAPLE_CEILING:
             continue
         rows.append(s)
-    rows.sort(key=lambda r: (-r["pilots"], r["avg_place"] if r["avg_place"] else 99))
+    rows.sort(key=lambda r: (-r["pilots"], r["avg_place"] if r["avg_place"] else 99, r["card"]))
     return group_into_shells(rows, unnamed), unnamed
 
 
@@ -537,7 +537,7 @@ def group_into_shells(rows, unnamed, min_decks=4, overlap=0.45):
         # deck. Require cards that actually distinguish it.
         if len([c for c in core if carded[c]["field_share"] < 15.0]) < 2:
             continue
-        core.sort(key=lambda c: carded[c]["field_share"])
+        core.sort(key=lambda c: (carded[c]["field_share"], c))
         members = set.intersection(*[deck_sets[c] for c in core])
         ds = [d for d in unnamed if id(d) in members]
         if len(ds) < min_decks:
@@ -551,7 +551,7 @@ def group_into_shells(rows, unnamed, min_decks=4, overlap=0.45):
             "top8": sum(1 for p in places if p <= 8),
             "avg_place": round(statistics.mean(places), 1) if places else None,
         })
-    shells.sort(key=lambda s: -s["decks"])
+    shells.sort(key=lambda s: (-s["decks"], s["core"]))
     return shells
 
 

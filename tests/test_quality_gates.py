@@ -138,3 +138,48 @@ def test_a_shells_core_cards_break_ties_on_the_name():
     expected = [c for c, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))][:10]
     assert top == expected
     assert top == sorted(top), "every card ties here, so the order is alphabetical"
+
+
+# ── no card pool: the ban test still runs ────────────────────────────────────
+
+def _banned_event(n_decks):
+    rows, cache = [], {}
+    for i in range(n_decks):
+        url = f"https://melee.gg/Decklist/View/{i}"
+        cache[url] = {"mainboard": {"Stormchaser's Talent": 4, "Island": 20, "Opt": 4}}
+        rows.append({"player1": f"P{i}", "player1_deck_url": url,
+                     "player2": "", "player2_deck_url": "", "winner": "", "result": ""})
+    return rows, cache
+
+
+def test_with_no_card_pool_a_pre_ban_event_is_still_caught():
+    """The console has always said "falling back to the ban test only" when no
+    card pool is cached. Until 2.0.0 the ban test never saw a deck in that case,
+    so 20 decks running a banned card came back unverified."""
+    rows, cache = _banned_event(20)
+    rec = ve.validate_event("1", "Standard RCQ", rows, cache, pool=None,
+                            banned={"stormchaser's talent"})
+    assert rec["verdict"] == "pre-era", rec
+
+
+def test_with_no_card_pool_a_clean_event_passes_the_ban_test():
+    rows, cache = _banned_event(20)
+    rec = ve.validate_event("1", "Standard RCQ", rows, cache, pool=None, banned=set())
+    assert rec["verdict"] == "ok", rec
+
+
+def test_unjudged_beats_quarantined(tmp_path, monkeypatch, capsys):
+    """An unreadable file alongside a quarantined event used to exit 2, which
+    fetch-melee treats as normal. Unjudged has to win, so the caller stops."""
+    _one_event(tmp_path)
+    demo = tmp_path / "melee_standard_900003_pairings.csv"
+    with open(demo, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=FIELDS)
+        w.writeheader()
+        w.writerow({"tournament_id": "900003", "tournament_name": "Melee Mobile build 40 test",
+                    "round": "1", "table_num": "1", "player1": "C", "player1_deck": "X",
+                    "player1_deck_url": "", "player2": "D", "player2_deck": "Y",
+                    "player2_deck_url": "", "result": "C won 2-0-0", "winner": "C"})
+    assert _run_validator(monkeypatch, tmp_path, []) == 2, "the demo event should be quarantined"
+    rc = _run_validator(monkeypatch, tmp_path, [("melee_standard_900002_pairings.csv", "OSError")])
+    assert rc == 1

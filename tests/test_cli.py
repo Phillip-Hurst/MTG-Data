@@ -108,3 +108,12 @@ def test_one_version_everywhere():
     with open(os.path.join(REPO_DIR, ".claude-plugin", "marketplace.json"), encoding="utf-8") as fh:
         market = json.load(fh)["plugins"][0]["version"]
     assert __version__ == plugin == market, (__version__, plugin, market)
+
+
+def test_a_missing_config_folder_stops_every_command(monkeypatch, capsys):
+    """Without config/ the era falls back to a rolling window without a word,
+    which is the failure the era split exists to prevent. A non-editable install
+    is how you'd get there."""
+    monkeypatch.setattr(cli, "CONFIG_DIR", os.path.join(REPO_DIR, "no-such-folder"))
+    assert cli.main(["era"]) == 2
+    assert "pip install -e ." in capsys.readouterr().err

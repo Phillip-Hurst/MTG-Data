@@ -109,7 +109,10 @@ def compute_winrates(rows):
             deck_draws[d1] += 1
             deck_draws[d2] += 1
 
-    decks = set(deck_wins) | set(deck_losses) | set(deck_draws)
+    # Sorted, so every ranking below breaks ties on the deck name. Set order
+    # changes with the hash seed, and it used to decide which of two decks on
+    # the same win rate printed first.
+    decks = sorted(set(deck_wins) | set(deck_losses) | set(deck_draws))
     deck_games = {d: deck_wins[d] + deck_losses[d] + deck_draws[d] for d in decks}
     return deck_games, deck_wins, deck_losses, deck_draws, matchup_wins
 

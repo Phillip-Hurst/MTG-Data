@@ -238,11 +238,12 @@ def test_package_ships_the_manifest_skills_and_the_name_manifest():
         "config/bans.json",
         "mtg.py",
         "scripts/setup_workspace.py",
+        "docs/data-quality.md",
         "README.md",
         "LICENSE",
     ]
     missing = [p for p in must_ship if not package.should_ship(Path(p))]
-    assert not missing, f"package.py would drop: {missing}"
+    assert not missing, f"build_plugin.py would drop: {missing}"
 
 
 def test_package_excludes_data_logs_tests_and_vault_notes():
@@ -283,7 +284,7 @@ def test_package_excludes_data_logs_tests_and_vault_notes():
         "__pycache__/mtg_stats.cpython-313.pyc",
     ]
     leaked = [p for p in must_not_ship if package.should_ship(Path(p))]
-    assert not leaked, f"package.py would ship: {leaked}"
+    assert not leaked, f"build_plugin.py would ship: {leaked}"
 
 
 def test_package_required_set_covers_the_archetype_names():

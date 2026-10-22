@@ -16,9 +16,11 @@ works on one player's own games.
 """
 import difflib
 import importlib
+import os
 import sys
 
 from mtg_data import __version__
+from mtg_data.core.paths import CONFIG_DIR
 
 # (command, module, summary), grouped by pipeline stage.
 STAGES = {
@@ -102,6 +104,15 @@ def usage() -> str:
 
 
 def main(argv=None) -> int:
+    # Card and player names are full of accents, and several reports draw with
+    # box characters. A Windows console or pipe defaults to cp1252 and raises on
+    # them, so every command gets UTF-8 with replacement from here.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(usage())
@@ -109,6 +120,15 @@ def main(argv=None) -> int:
     if argv[0] in ("-V", "--version"):
         print(__version__)
         return 0
+
+    if not os.path.isdir(CONFIG_DIR):
+        # The era, the ban list and the archetype vocabulary all live in
+        # config/. Without it the era quietly falls back to a rolling window,
+        # which is the failure the whole era split exists to prevent.
+        print(f"mtg: no config folder at {CONFIG_DIR}", file=sys.stderr)
+        print("     mtg-data runs from its checkout. Install it with "
+              "`pip install -e .` from the repo, or run `python mtg.py`.", file=sys.stderr)
+        return 2
 
     cmd, rest = argv[0], argv[1:]
     module_name = COMMANDS.get(cmd)

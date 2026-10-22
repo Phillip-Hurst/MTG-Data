@@ -18,6 +18,7 @@ checkout. It produces a zip whose root is the plugin directory layout:
       src/mtg_data/...            the pipeline
       config/*.json               the versioned reference data
       scripts/setup_workspace.py, scripts/setup.bat
+      docs/*.md
       mtg.py, pyproject.toml, README.md, CLAUDE.md, LICENSE
 
 Everything else is left out: scraped data, run logs, the test suite, the
@@ -50,7 +51,7 @@ out_file = repo.parent / f"{PLUGIN_NAME}.plugin"
 # scraped MTGO data. The flat workflow writes data and notes to the checkout
 # root, so nothing at the root ships unless it is named here.
 ROOT_FILES = {"mtg.py", "pyproject.toml", "README.md", "CLAUDE.md", "LICENSE"}
-SHIPPED_DIRS = ("skills", "src", "config", "scripts", ".claude-plugin")
+SHIPPED_DIRS = ("skills", "src", "config", "scripts", "docs", ".claude-plugin")
 
 # Config that ships. Every file in config/ is reference data the pipeline needs:
 # play_patterns.json is vod-review's pattern registry (play_profile exits 1
@@ -118,6 +119,9 @@ def should_ship(rel: Path) -> bool:
         return len(rel.parts) == 2 and rel.name in KEEP_SCRIPTS
     if top == "src":
         return rel.suffix == ".py"
+    if top == "docs":
+        # The README links into docs/, so the bundle carries it.
+        return len(rel.parts) == 2 and rel.suffix == ".md"
     # skills/: everything, reference notes included, except one person's
     # archetype working notes. The folder's README ships so a fresh install
     # knows what belongs there.

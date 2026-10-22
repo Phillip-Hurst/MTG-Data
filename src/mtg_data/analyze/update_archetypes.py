@@ -19,7 +19,7 @@ from datetime import datetime
 
 from mtg_data.classify import deck_labels
 from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
-from mtg_data.core.stats import classify_row, win_pct
+from mtg_data.core.stats import classify_row, wilson_interval, win_pct
 from mtg_data.quality import combine_events
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
@@ -121,7 +121,10 @@ def compute(rows):
         else:  # draw — sample size only, no win or loss
             deck_draws[d1] += 1
             deck_draws[d2] += 1
-    decks = set(deck_wins) | set(deck_losses) | set(deck_draws)
+    # Sorted, so every ranking below breaks ties on the deck name. Set order
+    # changes with the hash seed, and it used to decide which of two decks on
+    # the same win rate printed first.
+    decks = sorted(set(deck_wins) | set(deck_losses) | set(deck_draws))
     deck_games = {d: deck_wins[d] + deck_losses[d] + deck_draws[d] for d in decks}
     return deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, tournaments
 
@@ -157,14 +160,16 @@ def matchup_section(deck, deck_games, deck_wins, deck_losses, deck_draws, matchu
     lines.append("")
     lines.append(f"*Updated: {TODAY} · {n_tournaments} melee.gg tournaments · {total_matches:,} {FORMAT} matches with deck names on both sides*")
     lines.append("")
-    lines.append(f"**Overall: {games} games · {wins}W-{losses}L-{draws}D · Win rate {wr:.1f}% over decided games (match-win % incl. draws as 0.5: {mwr:.1f}%)**")
+    lo, hi = wilson_interval(wins, losses)
+    lines.append(f"**Overall: {games} games · {wins}W-{losses}L-{draws}D · Win rate {wr:.1f}% over decided games, 95% range {lo:.0f}-{hi:.0f}% (match-win % incl. draws as 0.5: {mwr:.1f}%)**")
     lines.append("")
     if opponents:
-        lines.append("| Opponent | Win% | N | Notes |")
-        lines.append("|---|---:|---:|---|")
-        for opp, n, _wins, opp_wr in opponents:
+        lines.append("| Opponent | Win% | 95% range | N | Notes |")
+        lines.append("|---|---:|---:|---:|---|")
+        for opp, n, opp_wins, opp_wr in opponents:
             note = "small sample" if n < 20 else ""
-            lines.append(f"| {opp} | {opp_wr:.1f}% | {n} | {note} |")
+            lo, hi = wilson_interval(opp_wins, n - opp_wins)
+            lines.append(f"| {opp} | {opp_wr:.1f}% | {lo:.0f}-{hi:.0f}% | {n} | {note} |")
     else:
         lines.append(f"_No matchup with at least {MIN_MATCHUP_GAMES} decided games yet._")
     lines.append("")
@@ -231,6 +236,10 @@ def build_meta(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, tou
     def share(d):
         return deck_games[d] / (field_size * 2) * 100 if field_size else 0
 
+    def rng(d):
+        lo, hi = wilson_interval(deck_wins[d], deck_losses[d])
+        return f"{lo:.0f}-{hi:.0f}%"
+
     real_decks = [(d, n) for d, n in sorted(deck_games.items(), key=lambda kv: -kv[1])
                   if d.lower() not in JUNK_DECKS]
     big_decks = [d for d, n in real_decks if n >= 100]
@@ -274,8 +283,10 @@ def build_meta(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, tou
     lines.append("")
     lines.append("Tier S: 55%+. Tier A: 52-55%. Tier B: 50-52%. Tier C: 48-50%. Tier D: below 48%. Win % is computed over decided games; draws are excluded.")
     lines.append("")
-    lines.append("| Tier | Deck | Games | Win % | Meta share |")
-    lines.append("|---|---|---:|---:|---:|")
+    lines.append("Tiers are cut on the point estimate. Read the 95% range beside it: where two decks' ranges overlap, this sample doesn't separate them, whatever their tiers say.")
+    lines.append("")
+    lines.append("| Tier | Deck | Games | Win % | 95% range | Meta share |")
+    lines.append("|---|---|---:|---:|---:|---:|")
     tiered = sorted(((d, deck_games[d], wr(d)) for d in big_decks), key=lambda x: -x[2])
     for d, g, w in tiered:
         if w >= 55:
@@ -288,7 +299,7 @@ def build_meta(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, tou
             t = "C"
         else:
             t = "D"
-        lines.append(f"| {t} | {d} | {g:,} | {w:.1f}% | {share(d):.1f}% |")
+        lines.append(f"| {t} | {d} | {g:,} | {w:.1f}% | {rng(d)} | {share(d):.1f}% |")
     lines.append("")
 
     # ── Most-played decks ────────────────────────────────────────────────
