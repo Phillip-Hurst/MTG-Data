@@ -139,6 +139,8 @@ def test_live_data_invariants():
             if outcome == "draw":
                 draws += 1
                 continue
+            if outcome == "mirror":
+                continue
             decided += 1
             a, b = (d1, d2) if outcome == "p1" else (d2, d1)
             wins[(a, b)] = wins.get((a, b), 0) + 1

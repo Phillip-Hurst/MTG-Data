@@ -170,8 +170,7 @@ More in [architecture](docs/architecture.md).
 
 The classifier's 93% agreement was measured on the decks its thresholds were tuned
 on; there's no held-out test set yet. Win-rate ranges assume independent matches,
-which Swiss rounds aren't, and mirror matches still count toward a deck's overall
-rate. Melee results carry no event date. The scrapers break when melee.gg or MTGO
+which Swiss rounds aren't. Melee results carry no event date. The scrapers break when melee.gg or MTGO
 redesign a page. [The full list](docs/limitations.md).
 
 ## Credits and legal

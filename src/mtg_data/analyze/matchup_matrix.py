@@ -68,7 +68,8 @@ def compute(rows):
             matchup_wins[d1][d2] += 1
         elif outcome == "p2":
             matchup_wins[d2][d1] += 1
-        # a draw still counts toward deck_games (sample size), no win for either
+        # a draw or a mirror still counts toward deck_games (sample size), no
+        # win for either; the matrix has no cell for a deck against itself
     return deck_games, matchup_wins
 
 # ── Render helpers ──────────────────────────────────────────────────────────

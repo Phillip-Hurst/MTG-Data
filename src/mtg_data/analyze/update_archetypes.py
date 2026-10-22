@@ -94,6 +94,7 @@ def compute(rows):
     deck_wins    = collections.Counter()
     deck_losses  = collections.Counter()
     deck_draws   = collections.Counter()
+    deck_mirrors = collections.Counter()  # seats in mirror matches: two per match
     matchup_wins = collections.defaultdict(collections.Counter)
     tournaments  = set()
     for r in rows:
@@ -110,27 +111,35 @@ def compute(rows):
             deck_wins[d2] += 1
             deck_losses[d1] += 1
             matchup_wins[d2][d1] += 1
+        elif outcome == "mirror":
+            # Neutral: both seats count toward the deck's games, neither
+            # toward a win rate. See core/stats.py.
+            deck_mirrors[d1] += 2
         else:  # draw — sample size only, no win or loss
             deck_draws[d1] += 1
             deck_draws[d2] += 1
     # Sorted, so every ranking below breaks ties on the deck name. Set order
     # changes with the hash seed, and it used to decide which of two decks on
     # the same win rate printed first.
-    decks = sorted(set(deck_wins) | set(deck_losses) | set(deck_draws))
-    deck_games = {d: deck_wins[d] + deck_losses[d] + deck_draws[d] for d in decks}
-    return deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, tournaments
+    decks = sorted(set(deck_wins) | set(deck_losses) | set(deck_draws) | set(deck_mirrors))
+    deck_games = {d: deck_wins[d] + deck_losses[d] + deck_draws[d] + deck_mirrors[d]
+                  for d in decks}
+    return deck_games, deck_wins, deck_losses, deck_draws, deck_mirrors, matchup_wins, tournaments
 
 # ── Build matchup data section for a single archetype ──────────────────────
 
-def matchup_section(deck, deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, total_matches, n_tournaments):
+def matchup_section(deck, deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, total_matches, n_tournaments,
+                    deck_mirrors=None):
     games = deck_games.get(deck, 0)
     if games == 0:
         return None
     wins = deck_wins[deck]
     losses = deck_losses[deck]
     draws = deck_draws[deck]
+    mirrors = (deck_mirrors or {}).get(deck, 0)
     wr = win_pct(wins, losses)
-    mwr = (wins + 0.5*draws)/games*100 if games else 0
+    non_mirror = games - mirrors
+    mwr = (wins + 0.5*draws)/non_mirror*100 if non_mirror else 0
 
     # Opponents this deck faced in either direction; win rate over decided games.
     opp_set = set(matchup_wins[deck].keys())
@@ -153,7 +162,8 @@ def matchup_section(deck, deck_games, deck_wins, deck_losses, deck_draws, matchu
     lines.append(f"*Updated: {TODAY} · {n_tournaments} melee.gg tournaments · {total_matches:,} {FORMAT} matches with deck names on both sides*")
     lines.append("")
     lo, hi = wilson_interval(wins, losses)
-    lines.append(f"**Overall: {games} games · {wins}W-{losses}L-{draws}D · Win rate {wr:.1f}% over decided games, 95% range {lo:.0f}-{hi:.0f}% (match-win % incl. draws as 0.5: {mwr:.1f}%)**")
+    mirror_note = f" · {mirrors // 2} mirror match(es), counted in games only" if mirrors else ""
+    lines.append(f"**Overall: {games} games · {wins}W-{losses}L-{draws}D{mirror_note} · Win rate {wr:.1f}% over decided games, 95% range {lo:.0f}-{hi:.0f}% (match-win % incl. draws as 0.5: {mwr:.1f}%)**")
     lines.append("")
     if opponents:
         lines.append("| Opponent | Win% | 95% range | N | Notes |")
@@ -169,7 +179,8 @@ def matchup_section(deck, deck_games, deck_wins, deck_losses, deck_draws, matchu
 
 # ── Update each existing archetype file ────────────────────────────────────
 
-def update_files(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, total_matches, n_tournaments):
+def update_files(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, total_matches, n_tournaments,
+                 deck_mirrors=None):
     updated = []
     unmatched = []
     files = glob.glob(os.path.join(ARCH_DIR, "[[]C[]] *.md"))
@@ -192,7 +203,8 @@ def update_files(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
             content = f.read()
 
         new_section = matchup_section(data_key, deck_games, deck_wins, deck_losses,
-                                       deck_draws, matchup_wins, total_matches, n_tournaments)
+                                       deck_draws, matchup_wins, total_matches, n_tournaments,
+                                       deck_mirrors)
         if not new_section:
             continue
 
@@ -391,12 +403,12 @@ def main():
         return 1
     os.makedirs(PROJECT_DIR, exist_ok=True)
     os.makedirs(ARCH_DIR, exist_ok=True)
-    dg, dw, dl, dd, mw, tn = compute(rows)
+    dg, dw, dl, dd, dm, mw, tn = compute(rows)
     total = sum(dg.values()) // 2
     print(f"  {total:,} matches across {len(tn)} tournaments\n")
 
     print("Updating archetype files...")
-    updated, unmatched = update_files(dg, dw, dl, dd, mw, total, len(tn))
+    updated, unmatched = update_files(dg, dw, dl, dd, mw, total, len(tn), dm)
     for slug, n in updated:
         print(f"  OK  {slug}  ({n} games)")
     if unmatched:

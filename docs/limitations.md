@@ -35,14 +35,18 @@ inside one era.
 **Cells under 10 decided games aren't printed**, and the archetype notes mark
 anything under 20 as a small sample.
 
-The range is optimistic, for three reasons worth knowing:
+**Mirror matches are a neutral entry.** When both players are on the same deck,
+the match counts toward that deck's games and meta share, and toward neither its
+win rate nor its match-win %. Counted as a win and a loss, a mirror pulls a deck
+toward 50%, and the most-played decks play the most mirrors. On the pool in the
+author's checkout, 74 mirror matches had held the most-played deck at 60.2%; as
+neutral entries it reads 62.7%.
+
+The range is optimistic, for two reasons worth knowing:
 
 - **Matches aren't independent.** One player plays several rounds, so a strong
   pilot lifts their deck's number for every round they play. Swiss pairing then
   matches records against similar records.
-- **Mirror matches count.** When both players are on the same deck, that deck gets
-  one win and one loss, which pulls every popular deck's overall rate toward 50%.
-  The head-to-head tables leave the mirror out; the overall rate doesn't yet.
 - **Only published lists are in the sample.** Events without decklists can't be
   labelled, and 1,094 pairing seats in the pool as of 2026-10-12 had no deck URL
   at all.

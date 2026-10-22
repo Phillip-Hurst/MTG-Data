@@ -86,10 +86,12 @@ def compute_winrates(rows):
     Byes, deckless rows and unparseable winners are dropped by classify_row, so
     they never reach these counters. Win rate is computed over decided games
     only (wins + losses); draws are tracked separately and excluded from it.
+    Mirror matches count toward a deck's games and nothing else.
     """
     deck_wins    = collections.Counter()
     deck_losses  = collections.Counter()
     deck_draws   = collections.Counter()
+    deck_mirrors = collections.Counter()  # seats in mirror matches: two per match
     matchup_wins = collections.defaultdict(collections.Counter)  # d1 → Counter(d2 beaten)
 
     for r in rows:
@@ -105,6 +107,10 @@ def compute_winrates(rows):
             deck_wins[d2] += 1
             deck_losses[d1] += 1
             matchup_wins[d2][d1] += 1
+        elif outcome == "mirror":
+            # Neutral: both seats count toward the deck's games, neither
+            # toward a win rate. See core/stats.py.
+            deck_mirrors[d1] += 2
         else:  # draw — counts for neither side's win rate
             deck_draws[d1] += 1
             deck_draws[d2] += 1
@@ -112,12 +118,14 @@ def compute_winrates(rows):
     # Sorted, so every ranking below breaks ties on the deck name. Set order
     # changes with the hash seed, and it used to decide which of two decks on
     # the same win rate printed first.
-    decks = sorted(set(deck_wins) | set(deck_losses) | set(deck_draws))
-    deck_games = {d: deck_wins[d] + deck_losses[d] + deck_draws[d] for d in decks}
-    return deck_games, deck_wins, deck_losses, deck_draws, matchup_wins
+    decks = sorted(set(deck_wins) | set(deck_losses) | set(deck_draws) | set(deck_mirrors))
+    deck_games = {d: deck_wins[d] + deck_losses[d] + deck_draws[d] + deck_mirrors[d]
+                  for d in decks}
+    return deck_games, deck_wins, deck_losses, deck_draws, deck_mirrors, matchup_wins
 
 
-def write_report(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, tournaments, total_rows):
+def write_report(deck_games, deck_wins, deck_losses, deck_draws, deck_mirrors, matchup_wins,
+                 tournaments, total_rows):
     today = datetime.now().strftime("%Y-%m-%d")
     total_kept = sum(deck_games.values()) // 2  # each match counted twice
 
@@ -145,12 +153,14 @@ def write_report(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
     lines.append("")
     lines.append(f"## Deck win rates (min {MIN_DECK_GAMES} games)")
     lines.append("")
-    lines.append("Win % = wins / decided games (wins + losses). A draw is neither a win nor a loss, so it is excluded from that rate. Match-win %, shown for reference, counts a draw as half a win across all games.")
+    lines.append("Win % = wins / decided games (wins + losses). A draw is neither a win nor a loss, so it is excluded from that rate. Match-win %, shown for reference, counts a draw as half a win.")
+    lines.append("")
+    lines.append("M is mirror matches, counted once per seat. A mirror is a neutral entry: it counts toward Games and meta share, and toward neither rate. Counted as a win and a loss, it would pull every popular deck toward 50%.")
     lines.append("")
     lines.append("The 95% range is a Wilson score interval on the win rate. Where it straddles 50%, this sample can't tell the deck from a coin flip yet.")
     lines.append("")
-    lines.append("| Deck | Games | W | L | D | Win % | 95% range | Match-win % |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("| Deck | Games | W | L | D | M | Win % | 95% range | Match-win % |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
 
     ranked = []
     for deck, games in deck_games.items():
@@ -159,13 +169,15 @@ def write_report(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
         wins = deck_wins[deck]
         losses = deck_losses[deck]
         draws = deck_draws[deck]
+        mirrors = deck_mirrors[deck]
         wr = win_pct(wins, losses)
-        mwr = (wins + 0.5 * draws) / games * 100 if games else 0
-        ranked.append((deck, games, wins, losses, draws, wr, mwr))
-    ranked.sort(key=lambda x: -x[5])
-    for deck, games, wins, losses, draws, wr, mwr in ranked:
+        non_mirror = games - mirrors
+        mwr = (wins + 0.5 * draws) / non_mirror * 100 if non_mirror else 0
+        ranked.append((deck, games, wins, losses, draws, mirrors, wr, mwr))
+    ranked.sort(key=lambda x: -x[6])
+    for deck, games, wins, losses, draws, mirrors, wr, mwr in ranked:
         lo, hi = wilson_interval(wins, losses)
-        lines.append(f"| {deck} | {games} | {wins} | {losses} | {draws} | {wr:.1f}% "
+        lines.append(f"| {deck} | {games} | {wins} | {losses} | {draws} | {mirrors} | {wr:.1f}% "
                      f"| {lo:.0f}-{hi:.0f}% | {mwr:.1f}% |")
     lines.append("")
 
@@ -261,13 +273,13 @@ def main():
               "be read, so those events contributed nothing.")
 
     print("\nComputing win rates...")
-    dg, dw, dl, dd, mw = compute_winrates(rows)
+    dg, dw, dl, dd, dm, mw = compute_winrates(rows)
     valid = sum(dg.values()) // 2
     print(f"  Matches with decks on both sides (byes/draws handled): {valid:,}")
     print(f"  Unique archetypes seen: {len(dg)}")
     print(f"  Archetypes with {MIN_DECK_GAMES}+ games: {sum(1 for d,n in dg.items() if n >= MIN_DECK_GAMES)}")
 
-    write_report(dg, dw, dl, dd, mw, tournaments, len(rows))
+    write_report(dg, dw, dl, dd, dm, mw, tournaments, len(rows))
 
 
 if __name__ == "__main__":

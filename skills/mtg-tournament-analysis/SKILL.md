@@ -417,7 +417,7 @@ seats that do have a URL are already resolved automatically.
 - Win rate = wins / total, shown as % with W-L in sub-text
 - Color scale: ≥65% strong green → ≥55% light green → 45–55% neutral → ≥35% light red → <35% strong red
 - Two sliders: "min matches per deck" (filters which archetypes appear) and "min cell matches" (fades low-sample cells)
-- Mirror cells (same deck vs same deck) show "—"
+- Mirror cells (same deck vs same deck) show "—". A mirror match counts toward each deck's match total and toward neither win rate, the same neutral entry `winrate-analysis` uses
 - Deck names are trimmed — "Izzet Spellementals " and "Izzet Spellementals" are the same deck
 
 When round data is available from aggregators but no CSV:

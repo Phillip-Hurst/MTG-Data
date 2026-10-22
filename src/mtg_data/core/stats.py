@@ -13,6 +13,11 @@ Counting rules:
     loss, so it is excluded from that denominator.
   - A row whose winner can't be matched to a player and isn't a recorded draw
     is skipped, not silently counted as a draw.
+  - A mirror match (the same deck in both seats) is a neutral entry. It
+    counts toward the deck's games and meta share, and toward neither its win
+    rate nor its match-win %. Counted as a win and a loss, as it was before
+    2.0.0, it pulled every popular deck's rate toward 50%, and the more a deck
+    was played, the harder it pulled.
 
 Data shapes this expects (from melee_scraper.py):
   decided game : result "Jane Doe won 2-1-0", winner "Jane Doe"
@@ -92,8 +97,10 @@ def normalize(name):
 def classify_row(row):
     """Map a pairing row to (deck1, deck2, outcome), decks already normalized.
 
-    outcome is "p1", "p2" or "draw". Returns None for byes, deckless rows and
-    unparseable results; callers drop those from every tally.
+    outcome is "p1", "p2", "draw" or "mirror". "mirror" means both seats are
+    the same deck, whoever won; it is a neutral entry (see the module notes).
+    Returns None for byes, deckless rows and unparseable results; callers drop
+    those from every tally.
     """
     d1 = normalize(row.get("player1_deck"))
     d2 = normalize(row.get("player2_deck"))
@@ -111,14 +118,19 @@ def classify_row(row):
 
     winner = (row.get("winner") or "").strip()
     if winner and winner == p1:
-        return d1, d2, "p1"
-    if winner and winner == p2:
-        return d1, d2, "p2"
-    if "draw" in result:
-        return d1, d2, "draw"
-    # Winner matches neither player and the result isn't a draw. Drop it rather
-    # than mis-bucket it as a draw (the bug this module was written to kill).
-    return None
+        outcome = "p1"
+    elif winner and winner == p2:
+        outcome = "p2"
+    elif "draw" in result:
+        outcome = "draw"
+    else:
+        # Winner matches neither player and the result isn't a draw. Drop it
+        # rather than mis-bucket it as a draw (the bug this module was written
+        # to kill). A mirror with an unparseable result is dropped the same way.
+        return None
+    if d1 == d2:
+        return d1, d2, "mirror"
+    return d1, d2, outcome
 
 
 def win_pct(wins, losses):

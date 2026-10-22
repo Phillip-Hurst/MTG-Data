@@ -62,6 +62,18 @@ existing setup finds its data where it left it.
   no format or ban filter and said nothing. Plain imports now, and a failure in
   the guard itself prints a warning.
 
+### Fixed: mirror matches are a neutral entry
+
+When both seats played the same deck, the deck took a win and a loss from one
+match, which pulled its rate toward 50%. The most-played decks play the most
+mirrors, so the decks people most wanted a number for got the flattest one.
+A mirror now counts toward a deck's games and meta share and toward neither its
+win rate nor its match-win %. `classify_row` returns a new `"mirror"` outcome,
+the win-rate tracker gains an M column (mirror matches, once per seat), and the
+archetype notes say how many mirrors sit in the games count. On the author's
+pool, 74 mirror matches had held Izzet Prowess at 60.2%; it reads 62.7%. Its
+games and meta share don't move.
+
 ### Fixed: reproducibility
 
 - Four commands ordered ties by set iteration, so the same data printed a
