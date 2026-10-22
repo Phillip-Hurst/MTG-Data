@@ -1,5 +1,90 @@
 # Changelog
 
+## 2.0.0 - 2026-10-21
+
+The layout changes, so every command does too. The numbers don't: 22 commands
+were run before and after on the same copy of real data, and they exit the same
+way, write the same files and print the same output apart from the command
+hints.
+
+### One package, one entry point
+
+The forty scripts at the repo root are now `src/mtg_data/`, in one subpackage
+per pipeline stage: `ingest`, `quality`, `classify`, `analyze`, `review`, and
+`core` for paths, eras and the counting rules. Every step runs through one
+command:
+
+```
+python mtg.py --help                 # from a checkout, no install
+python mtg.py card-signal --lens rogue
+mtg card-signal --lens rogue         # after pip install -e .
+```
+
+A command is its module's name with hyphens. Two modules were renamed to drop a
+redundant prefix:
+
+| Before | Now |
+|---|---|
+| `python mtg_fetch.py` | `python mtg.py fetch-melee` |
+| `python mtg_era.py` | `python mtg.py era` |
+| `python card_signal.py ...` | `python mtg.py card-signal ...` (and so on for every script) |
+| `python setup.py` | `python scripts/setup_workspace.py` |
+| `python package.py` | `python scripts/build_plugin.py` |
+
+`setup.py` had to move regardless: at the root of a project with a
+`pyproject.toml`, it's the file setuptools executes on `pip install`.
+
+**Workspaces made by an older setup need their scrape scripts regenerated.**
+Re-run `python scripts/setup_workspace.py`; it keeps your config and rewrites
+`scrape.bat` / `scrape.sh` to call `mtg.py`.
+
+### Config has its own folder
+
+`bans.json`, `set_releases.json`, `archetype_names.json`,
+`archetype_vocabulary.json`, `play_patterns.json` and `mtg_config.json` move to
+`config/`. They are reviewed like code, because every number depends on them.
+Scraped data still lands in the checkout root in the flat workflow, so an
+existing setup finds its data where it left it.
+
+### Fixed
+
+- `validate-events` printed "All events passed" and exited 0 when some event
+  files couldn't be read. A variable recording that was set and never used. It
+  now exits 1 and says how many events went unjudged, so `fetch-melee` stops
+  instead of carrying an unverified pool forward.
+- `cluster-shells` printed a different Core line for the same data on every run:
+  ties broke on set iteration order. Found by running the whole pipeline twice
+  under different hash seeds; every output now matches.
+- `build-refs-from-melee` and `build-mtgtop8-baseline` wrapped their era-guard
+  imports in `except Exception` and, if anything failed, built references with
+  no format or ban filter and said nothing. The imports are plain imports now,
+  and a failure in the guard itself prints a warning.
+- Import shims that fell back to a pasted copy of another module's code
+  ("MUST stay byte-for-byte equivalent") are gone.
+- `winrate-analysis`, `matchup-matrix` and `update-archetypes` ran in full when
+  asked for `--help`. They take `--help` now, and exit 1 with no data instead
+  of 0.
+- The test that reads `archetype_refs.json` failed on a fresh clone, where the
+  file doesn't exist. Tests that read the author's scraped data carry a
+  `local_data` marker and skip without it.
+- `requirements.txt` was matched by the `*.txt` rule in `.gitignore`, so the
+  file the README told you to install from was never in the repo.
+  `pyproject.toml` now carries the dependencies.
+
+### Added
+
+- **A 95% range on every win rate.** The win-rate tracker prints a Wilson score
+  interval beside each deck and each head-to-head pairing. Ten decided games at
+  60% runs from 31% to 83%, which is the honest answer for most matchup cells in
+  one format era.
+- `pyproject.toml`, a ruff rule set the tree passes, and GitHub Actions running
+  lint and the suite on Ubuntu (Python 3.10, 3.13) and Windows (3.13).
+- `tests/test_cli.py`: every command imports, every module with a `main()` is
+  reachable from the CLI, the pipeline's own subprocesses resolve without an
+  install, and one version number is written everywhere.
+- `scripts/build_plugin.py` builds the bundle from an allow-list. The deny-list
+  it replaced leaked every new kind of local file until somebody named it.
+
 ## 1.21.0 - 2026-10-17
 
 Batch reviews, and three things a 26-match review on 2026-10-17 needed that the

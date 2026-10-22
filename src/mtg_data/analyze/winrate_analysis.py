@@ -25,7 +25,7 @@ from datetime import datetime
 
 from mtg_data.classify import deck_labels
 from mtg_data.core.paths import ROOT_DIR
-from mtg_data.core.stats import classify_row, win_pct
+from mtg_data.core.stats import classify_row, wilson_interval, win_pct
 from mtg_data.quality import combine_events
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
@@ -144,8 +144,10 @@ def write_report(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
     lines.append("")
     lines.append("Win % = wins / decided games (wins + losses). A draw is neither a win nor a loss, so it is excluded from that rate. Match-win %, shown for reference, counts a draw as half a win across all games.")
     lines.append("")
-    lines.append("| Deck | Games | W | L | D | Win % | Match-win % |")
-    lines.append("|---|---:|---:|---:|---:|---:|---:|")
+    lines.append("The 95% range is a Wilson score interval on the win rate. Where it straddles 50%, this sample can't tell the deck from a coin flip yet.")
+    lines.append("")
+    lines.append("| Deck | Games | W | L | D | Win % | 95% range | Match-win % |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
 
     ranked = []
     for deck, games in deck_games.items():
@@ -159,7 +161,9 @@ def write_report(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
         ranked.append((deck, games, wins, losses, draws, wr, mwr))
     ranked.sort(key=lambda x: -x[5])
     for deck, games, wins, losses, draws, wr, mwr in ranked:
-        lines.append(f"| {deck} | {games} | {wins} | {losses} | {draws} | {wr:.1f}% | {mwr:.1f}% |")
+        lo, hi = wilson_interval(wins, losses)
+        lines.append(f"| {deck} | {games} | {wins} | {losses} | {draws} | {wr:.1f}% "
+                     f"| {lo:.0f}-{hi:.0f}% | {mwr:.1f}% |")
     lines.append("")
 
     lines.append(f"## Head-to-head matchup matrix (min {MIN_MATCHUP_GAMES} games per pairing)")
@@ -197,8 +201,8 @@ def write_report(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
     lines.append("")
     lines.append("Decided games only (draws excluded). A win % is from Deck A's side.")
     lines.append("")
-    lines.append("| Deck A | Deck B | A wins | B wins | Decided | A win % |")
-    lines.append("|---|---|---:|---:|---:|---:|")
+    lines.append("| Deck A | Deck B | A wins | B wins | Decided | A win % | 95% range |")
+    lines.append("|---|---|---:|---:|---:|---:|---:|")
     seen_pairs = set()
     top_matchups = []
     for d1 in list(matchup_wins):
@@ -216,7 +220,8 @@ def write_report(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
             top_matchups.append((d1, d2, a_wins, b_wins, total, wr))
     top_matchups.sort(key=lambda x: -x[4])
     for d1, d2, aw, bw, total, wr in top_matchups[:30]:
-        lines.append(f"| {d1} | {d2} | {aw} | {bw} | {total} | {wr:.1f}% |")
+        lo, hi = wilson_interval(aw, bw)
+        lines.append(f"| {d1} | {d2} | {aw} | {bw} | {total} | {wr:.1f}% | {lo:.0f}-{hi:.0f}% |")
     lines.append("")
 
     with open(VAULT_NOTE, "w", encoding="utf-8") as f:

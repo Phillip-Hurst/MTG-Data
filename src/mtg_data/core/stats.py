@@ -20,6 +20,8 @@ Data shapes this expects (from melee_scraper.py):
   bye          : result "Jane Doe was awarded a bye", opponent deck blank
 """
 
+import math
+
 # Archetype name aliases. Merge organizer labels that are the same deck.
 # Keep this small and explicit; only merge when confirmed.
 #
@@ -123,3 +125,24 @@ def win_pct(wins, losses):
     """Win rate over decided games only. Returns 0.0 when nothing is decided."""
     decided = wins + losses
     return (wins / decided * 100) if decided else 0.0
+
+
+def wilson_interval(wins, losses, z=1.96):
+    """95% Wilson score interval for a win rate over decided games, in percent.
+
+    Returns (low, high). With nothing decided the rate could be anything, so
+    the interval is (0.0, 100.0).
+
+    Wilson rather than the textbook p +/- z*sqrt(p(1-p)/n) because that one
+    collapses to zero width at 0 or 100% and spills outside 0-100 on small
+    samples, and small samples are most of what one format era produces: a
+    matchup cell at the 10-match floor at 60% runs from 31% to 83%.
+    """
+    n = wins + losses
+    if n == 0:
+        return 0.0, 100.0
+    p = wins / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denom
+    return max(0.0, (centre - half) * 100), min(100.0, (centre + half) * 100)
