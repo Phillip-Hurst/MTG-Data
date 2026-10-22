@@ -15,10 +15,8 @@ import sys
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
 
-import deck_labels  # noqa: E402
+from mtg_data.classify import deck_labels
 
 
 PLACEHOLDER_REF = {
@@ -113,7 +111,7 @@ def test_junk_organizer_name_is_dropped_not_counted_as_a_deck():
 def test_aliases_are_applied_to_every_source():
     """The whole point of the change: one deck, one name, whichever layer
     produced it."""
-    from mtg_stats import ARCHETYPE_ALIASES
+    from mtg_data.core.stats import ARCHETYPE_ALIASES
     alias, canonical = next(iter(ARCHETYPE_ALIASES.items()))
     r = resolver(cache={"u": {"mainboard": {"Unknown Card": 60}, "archetype": alias}})
     assert r.resolve("u", alias).name == canonical
@@ -188,7 +186,7 @@ def standings_row(tid, player, url, deck, rank="1", points="9"):
 
 
 def test_snapshot_counts_only_players_with_a_cached_decklist():
-    import build_baseline
+    from mtg_data.analyze import build_baseline
     rows = [
         standings_row("t1", "Player One", "u1", "Untitled Pile"),
         standings_row("t1", "Player Two", "u2", "Placeholder Aggro"),
@@ -202,7 +200,7 @@ def test_snapshot_counts_only_players_with_a_cached_decklist():
 
 
 def test_snapshot_records_only_events_that_contributed_a_player():
-    import build_baseline
+    from mtg_data.analyze import build_baseline
     rows = [
         standings_row("t1", "Player One", "u1", "Untitled Pile"),
         standings_row("t2", "Player Two", "u2", "Placeholder Aggro"),
@@ -217,7 +215,7 @@ def test_snapshot_records_only_events_that_contributed_a_player():
 
 def test_snapshot_folds_three_organizer_names_into_one_deck():
     """44 labels for 78 players was the defect. This is it in miniature."""
-    import build_baseline
+    from mtg_data.analyze import build_baseline
     rows = [
         standings_row("t1", "Player One", "u1", "Whatever"),
         standings_row("t1", "Player Two", "u2", "Something Else"),
@@ -231,7 +229,7 @@ def test_snapshot_folds_three_organizer_names_into_one_deck():
 
 
 def test_snapshot_tracks_which_layer_named_each_deck():
-    import build_baseline
+    from mtg_data.analyze import build_baseline
     rows = [
         standings_row("t1", "Player One", "u1", "Whatever"),
         standings_row("t1", "Player Two", "u2", "Placeholder Aggro"),
@@ -248,7 +246,7 @@ def test_snapshot_tracks_which_layer_named_each_deck():
 
 def test_second_run_produces_the_same_snapshot(tmp_path):
     """Guardrail 4: run it twice."""
-    import build_baseline
+    from mtg_data.analyze import build_baseline
     rows = [standings_row("t1", "Player One", "u1", "Whatever")]
     cache = {"u1": {"mainboard": CACHED_MAIN}}
     a, _, _ = build_baseline.build_snapshot(rows, "2026-09-07", "test", resolver(cache=cache))
@@ -257,7 +255,7 @@ def test_second_run_produces_the_same_snapshot(tmp_path):
 
 
 def test_empty_standings_produce_an_empty_snapshot_not_a_crash():
-    import build_baseline
+    from mtg_data.analyze import build_baseline
     s, t, r = build_baseline.build_snapshot([], "2026-09-07", "test", resolver())
     assert s["total_players_with_deck"] == 0
     assert s["archetypes"] == {}

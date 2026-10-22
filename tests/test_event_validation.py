@@ -1,7 +1,7 @@
 """
 Regression tests for the 2026-08-27 contamination bug.
 
-What went wrong: mtg_fetch.py printed "Window start: 2026-08-10 — post-ban",
+What went wrong: fetch_melee.py printed "Window start: 2026-08-10 — post-ban",
 then admitted Sydney Standard Spectacular 100K (pre-ban) and NRG Series $10k
 Team Trios (Modern) into the Standard pool. Two causes:
 
@@ -22,7 +22,6 @@ from datetime import datetime, timedelta
 import pytest
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, SCRIPT_DIR)
 
 # mtg_fetch imports playwright at module scope; the extraction helpers under
 # test don't touch a browser, so stub it rather than requiring the install.
@@ -35,9 +34,9 @@ if "playwright" not in sys.modules:
     sys.modules["playwright"] = pw
     sys.modules["playwright.sync_api"] = sync_api
 
-import mtg_fetch  # noqa: E402
-import mtg_era  # noqa: E402
-import validate_events as ve  # noqa: E402
+from mtg_data.ingest import fetch_melee as mtg_fetch
+from mtg_data.core import era as mtg_era
+from mtg_data.quality import validate_events as ve
 
 
 def api_rows(rows):
@@ -299,7 +298,7 @@ def test_rewrite_keeps_only_the_seat_and_drops_quarantined_events(tmp_path):
     could never come back. See tests/test_combine_events.py.
     """
     import csv
-    import combine_events as ce
+    from mtg_data.quality import combine_events as ce
 
     def write_event(tid, rows):
         with open(tmp_path / f"melee_standard_{tid}_pairings.csv", "w",
@@ -355,7 +354,7 @@ def test_a_second_validation_run_does_not_shrink_the_pool(tmp_path):
     same pool both times.
     """
     import csv
-    import combine_events as ce
+    from mtg_data.quality import combine_events as ce
 
     rows = [pairing(f"p{i}", f"q{i}", "a", "b", f"p{i}") for i in range(6)]
     for i, r in enumerate(rows):
@@ -406,8 +405,8 @@ def test_corrections_reach_the_columns_the_matchup_matrix_reads(tmp_path):
     shows up in a matchup check.
     """
     import csv
-    import apply_corrections as ac
-    import mtg_stats
+    from mtg_data.classify import apply_corrections as ac
+    from mtg_data.core import stats as mtg_stats
 
     path = tmp_path / "melee_standard_500001_pairings.csv"
     fields = ["tournament_id", "tournament_name", "round", "table_num",
@@ -439,12 +438,12 @@ def test_aliases_resolve_to_names_the_vault_actually_uses():
     deck instead of merging it. That's how "Izzet" first got mapped to "Izzet
     Elementals", which has no note, while "Izzet Spellementals" does.
     """
-    from mtg_stats import ARCHETYPE_ALIASES
+    from mtg_data.core.stats import ARCHETYPE_ALIASES
 
     # archetype_names.json is the shipped vocabulary. The notes that used to
     # carry it are one person's working notes and left the repo in 1.10.0; a
     # fresh clone has none of them, so the manifest is what this checks.
-    manifest = os.path.join(SCRIPT_DIR, "archetype_names.json")
+    manifest = os.path.join(SCRIPT_DIR, "config", "archetype_names.json")
     if not os.path.exists(manifest):
         pytest.fail("archetype_names.json is missing: nothing defines the "
                     "canonical vocabulary, so every alias is unverifiable")
@@ -460,7 +459,7 @@ def test_aliases_resolve_to_names_the_vault_actually_uses():
 
 def test_no_alias_target_is_itself_aliased():
     """A -> B -> C means normalize() is order-dependent. Keep the table flat."""
-    from mtg_stats import ARCHETYPE_ALIASES
+    from mtg_data.core.stats import ARCHETYPE_ALIASES
     chained = {v for v in ARCHETYPE_ALIASES.values() if v in ARCHETYPE_ALIASES}
     assert not chained, f"alias chain via {sorted(chained)}"
 
@@ -492,7 +491,7 @@ def test_quarantined_event_files_leave_the_matchup_glob(tmp_path):
 
 def test_resolved_notes_are_archived_and_unresolved_ones_stay(tmp_path):
     """The review folder is the to-do list, so a finished day has to leave it."""
-    import apply_corrections as ac
+    from mtg_data.classify import apply_corrections as ac
 
     def note(name, entries):
         body = f"# Review {name}\n\n---\n\n"
@@ -560,6 +559,7 @@ def test_shipped_shell_scripts_are_strictly_ascii():
     scripts = []
     for pat in ("*.bat", "*.ps1", "*.cmd"):
         scripts.extend(_glob.glob(os.path.join(SCRIPT_DIR, pat)))
+        scripts.extend(_glob.glob(os.path.join(SCRIPT_DIR, "scripts", pat)))
     if not scripts:
         pytest.skip("no shell scripts in the repo")
 
@@ -580,10 +580,11 @@ def test_shipped_shell_scripts_are_strictly_ascii():
         + "\n  ".join(offenders))
 
 
+@pytest.mark.local_data
 def test_card_pool_cache_is_present_and_sane():
     pool, meta = ve.build_card_pool.load_pool("Standard", SCRIPT_DIR)
     if pool is None:
-        pytest.skip("no card_pool_standard.json — run build_card_pool.py")
+        pytest.skip("no card_pool_standard.json — run python mtg.py build-card-pool")
     assert len(pool) > 1000
     assert "llanowar elves" in pool
     assert "goryo's vengeance" not in pool, "Modern-only card must not be in the Standard pool"

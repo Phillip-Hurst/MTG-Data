@@ -5,9 +5,9 @@ which rule to go read. It's a map, not the territory: every number below points 
 the Comprehensive Rules, and the CR is what you quote.
 
 ```
-python rules_lookup.py 117.3b
-python rules_lookup.py --search "state-based"
-python rules_lookup.py --glossary "deathtouch"
+python mtg.py rules-lookup 117.3b
+python mtg.py rules-lookup --search "state-based"
+python mtg.py rules-lookup --glossary "deathtouch"
 ```
 
 Checked against **MagicCompRules 20260819**. The CR is revised with every set, so

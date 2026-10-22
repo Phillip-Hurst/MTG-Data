@@ -35,12 +35,12 @@ Every answer names a rule number and quotes the text. If you can't find the rule
 you couldn't find it.
 
 ```bash
-python rules_lookup.py 117.3b            # one rule, verbatim
-python rules_lookup.py 704               # a whole section
-python rules_lookup.py --search "split second"
-python rules_lookup.py --search "legend rule" --context 2
-python rules_lookup.py --glossary "deathtouch"
-python rules_lookup.py --version         # what's cached, and how old
+python mtg.py rules-lookup 117.3b            # one rule, verbatim
+python mtg.py rules-lookup 704               # a whole section
+python mtg.py rules-lookup --search "split second"
+python mtg.py rules-lookup --search "legend rule" --context 2
+python mtg.py rules-lookup --glossary "deathtouch"
+python mtg.py rules-lookup --version         # what's cached, and how old
 ```
 
 The script downloads the current CR from magic.wizards.com, caches it beside the

@@ -15,7 +15,7 @@ from datetime import date
 
 import pytest
 
-import refs_store
+from mtg_data.classify import refs_store
 
 
 def ref(cards, decks=None, notes=None, **kw):
@@ -188,7 +188,8 @@ def test_mainboard_is_the_only_shape_older_readers_need(tmp_path):
 # ── the writers actually route through it ────────────────────────────────────
 
 @pytest.mark.parametrize("module_name", [
-    "build_refs_from_melee", "classify_decks", "build_mtgtop8_baseline", "audit_refs",
+    "mtg_data.classify.build_refs_from_melee", "mtg_data.classify.classify_decks",
+    "mtg_data.ingest.build_mtgtop8_baseline", "mtg_data.quality.audit_refs",
 ])
 def test_every_writer_uses_the_shared_store(module_name):
     """
@@ -203,10 +204,10 @@ def test_every_writer_uses_the_shared_store(module_name):
 
 def test_no_script_writes_the_refs_file_directly():
     import pathlib
-    root = pathlib.Path(refs_store.__file__).parent
+    root = pathlib.Path(refs_store.__file__).parent.parent   # the mtg_data package
     offenders = []
-    for py in sorted(root.glob("*.py")):
-        if py.name in ("refs_store.py", "archive_era.py", "setup.py", "package.py"):
+    for py in sorted(root.rglob("*.py")):
+        if py.name in ("refs_store.py", "archive_era.py"):
             continue
         try:
             text = py.read_text(encoding="utf-8")
@@ -280,10 +281,19 @@ def test_requires_survives_a_merge():
     assert merged2["X"]["decks"] == 9
 
 
+@pytest.mark.local_data
 def test_the_two_4cc_references_require_inevitable_defeat():
-    """Guards the split itself: without this, Jeskai lists drift back into 4CC."""
+    """Guards the split itself: without this, Jeskai lists drift back into 4CC.
+
+    archetype_refs.json is built from scraped decklists and .gitignore keeps it
+    out of the repo, so on a fresh clone there is nothing to check. Before 2.0.0
+    this test failed there instead of saying so, which made CI impossible.
+    """
     import os
-    path = os.path.join(os.path.dirname(refs_store.__file__), "archetype_refs.json")
+    from mtg_data.core.paths import ROOT_DIR
+    path = os.path.join(os.environ.get("MTG_DATA_DIR") or ROOT_DIR, "archetype_refs.json")
+    if not os.path.exists(path):
+        pytest.skip("no local archetype_refs.json (scraped data, not in the repo)")
     refs = refs_store.load(path)
     for label in ("Four-Color Control (Jeskai Base)", "Four-Color Control (Black Base)"):
         assert label in refs, f"{label} missing from archetype_refs.json"

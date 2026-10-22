@@ -18,7 +18,7 @@ import os
 
 import pytest
 
-import mtg_stats
+from mtg_data.core import stats as mtg_stats
 
 
 def row(**kw):
@@ -112,6 +112,7 @@ def _live_pairings_files():
     return [p for p in set(files) if not os.path.basename(p).endswith("_all_pairings.csv")]
 
 
+@pytest.mark.local_data
 def test_live_data_invariants():
     files = _live_pairings_files()
     if not files:

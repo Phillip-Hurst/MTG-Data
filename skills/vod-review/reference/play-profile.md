@@ -22,23 +22,23 @@ named and counted, and the cross-deck note says where it lives rather than
 claiming it. The moment a second deck shows the same pattern it gets promoted.
 The bar is `MIN_DECKS_FOR_PLAYER_HABIT`, currently 2, on top of the trend bar.
 
-**`play_profile.py` at the repo root does the counting.** Exit codes: `0` clean,
+**`python mtg.py play-profile` does the counting** (`src/mtg_data/review/play_profile.py`). Exit codes: `0` clean,
 `1` couldn't run, `2` ran and found lines it couldn't use. A hand edit to a
 profile note is gone on the next run, so corrections belong in the ledger line.
 
 ```bash
-python play_profile.py                 # roll up, write the profiles
-python play_profile.py --validate      # check the ledger, write nothing
-python play_profile.py --dry-run       # print the profile, write nothing
-python play_profile.py --json          # the counts, for answering a question
-python play_profile.py --json --full   # the counts plus the card-for-card hands
-python play_profile.py --hands         # the index of kept hands, card by card
-python play_profile.py --min-occurrences 4 --min-sessions 3   # a stricter bar
+python mtg.py play-profile                 # roll up, write the profiles
+python mtg.py play-profile --validate      # check the ledger, write nothing
+python mtg.py play-profile --dry-run       # print the profile, write nothing
+python mtg.py play-profile --json          # the counts, for answering a question
+python mtg.py play-profile --json --full   # the counts plus the card-for-card hands
+python mtg.py play-profile --hands         # the index of kept hands, card by card
+python mtg.py play-profile --min-occurrences 4 --min-sessions 3   # a stricter bar
 ```
 
 **Neither the ledger nor the profile notes ship, and neither belongs in the
 repo.** They are the user's own play data. `package.py` drops them from a bundle
-and `.gitignore` covers both, with a test pinning it. `play_patterns.json` is
+and `.gitignore` covers both, with a test pinning it. `config/play_patterns.json` is
 different: it is a vocabulary of how Magic decisions go wrong, true regardless of
 who was holding the cards, and it ships.
 
@@ -46,7 +46,7 @@ who was holding the cards, and it ships.
 
 ## The pattern registry is the thing that makes a habit countable
 
-`play_patterns.json` at the repo root. Every finding names one `pattern_id` from
+`config/play_patterns.json`. Every finding names one `pattern_id` from
 it, and that is what the profile counts.
 
 **`kind` cannot do this job, and trying was the original defect.** Kind is a

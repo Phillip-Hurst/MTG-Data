@@ -17,10 +17,9 @@ import sys
 import pytest
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, SCRIPT_DIR)
 
-import play_profile as pp  # noqa: E402
-import migrate_play_log_format as mig  # noqa: E402
+from mtg_data.review import play_profile as pp
+from mtg_data.review import migrate_play_log_format as mig
 
 
 # ── inferring the format ──────────────────────────────────────────────────────

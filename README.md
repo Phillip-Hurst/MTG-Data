@@ -39,13 +39,13 @@ Two steps. Step 1 gives Claude the skills. Step 2 builds the place the data live
 Clone the repo, or use the copy the plugin installed, and run:
 
 ```
-python setup.py        # Windows
-python3 setup.py       # macOS / Linux
+python scripts/setup_workspace.py        # Windows
+python scripts/setup_workspace.py       # macOS / Linux
 ```
 
 Setup is what makes the skills useful. Without it there's no workspace, no scrape script, and no archetype baseline, so every question comes back "no local data." Details in [Set up local scraping](#set-up-local-scraping) below.
 
-Prefer a file? `python package.py` builds `mtg-data.plugin`, a zip of the plugin layout, for installing from a local checkout.
+Prefer a file? `python scripts/build_plugin.py` builds `mtg-data.plugin`, a zip of the plugin layout, for installing from a local checkout.
 
 ---
 
@@ -73,8 +73,8 @@ What a session can fetch live, with no local data:
 
 ## Set up local scraping
 
-**Windows**: double-click `setup.bat`, or run `python setup.py`.
-**macOS / Linux**: `python3 setup.py`.
+**Windows**: double-click `setup.bat`, or run `python scripts/setup_workspace.py`.
+**macOS / Linux**: `python scripts/setup_workspace.py`.
 
 Setup will:
 
@@ -122,11 +122,11 @@ Under the hood the script sets three environment variables and calls the fetcher
 To run a fetcher directly, set those yourself, or run it in the repo folder and everything defaults to landing next to the scripts:
 
 ```
-python mtg_fetch.py --format Modern --since 2026-05-01
-python fetch_mtgo.py --format Modern
+python mtg.py fetch-melee --format Modern --since 2026-05-01
+python mtg.py fetch-mtgo --format Modern
 ```
 
-`mtg_fetch.py` flags: `--format`, `--since YYYY-MM-DD`, `--dry-run`, `--fetch-sets`.
+`fetch_melee.py` flags: `--format`, `--since YYYY-MM-DD`, `--dry-run`, `--fetch-sets`.
 
 ---
 
@@ -143,9 +143,9 @@ That guard is not hypothetical. In August 2026, 1,316 of 1,708 pairing rows in a
 **`audit_refs.py`** checks `archetype_refs.json` is in-era, in-format, and free of labels that collide with each other. `--strict` exits non-zero. `--apply-aliases` collapses confirmed duplicates and backs up first.
 
 ```
-python validate_events.py --format Standard
-python build_card_pool.py --format Standard
-python audit_refs.py --strict
+python mtg.py validate-events --format Standard
+python mtg.py build-card-pool --format Standard
+python mtg.py audit-refs --strict
 ```
 
 `build_baseline.py` refuses to write a snapshot when the quarantine report is missing, was built for a different era, or predates the last scrape. `--skip-validation-check` overrides it, and you should have a reason.
@@ -155,7 +155,7 @@ python audit_refs.py --strict
 The search window opens at the start of the current **era**: the later of the newest set release (`set_releases.json`) and the newest banned and restricted announcement (`bans.json`). A ban and a set release inside 14 days count as one reset, anchored on the earlier date.
 
 ```
-python mtg_era.py
+python mtg.py era
 ```
 
 That prints where the window starts and why. A set release is the obvious break. A ban is the sneaky one, because the files keep their names, the archetype labels keep their spelling, and a win rate against a deck that no longer exists still reads like a fact.
@@ -163,10 +163,10 @@ That prints where the window starts and why. A set release is the obvious break.
 When a B&R announcement lands:
 
 ```
-python archive_era.py --dry-run     # what would move
-python archive_era.py               # move it
-python mtg_fetch.py                 # scrape the new era from scratch
-python build_mtgtop8_baseline.py    # re-seed references for the new era
+python mtg.py archive-era --dry-run     # what would move
+python mtg.py archive-era               # move it
+python mtg.py fetch-melee                 # scrape the new era from scratch
+python mtg.py build-mtgtop8-baseline    # re-seed references for the new era
 ```
 
 `archive_era.py` moves the scraped CSVs, the MTGO dumps, and the closing era's baseline into `archive/through-YYYY-MM-DD/` with a manifest. That's not tidiness. The analysis scripts glob `melee_*_pairings.csv` out of the data folder and pool everything they find, and the glob doesn't recurse, so moving the files down one level is what takes them out of the live numbers.
@@ -180,7 +180,7 @@ Two ways, answering different questions.
 **From mtgtop8, no scrape needed.** `setup.py` runs this, and you can re-run it any time:
 
 ```
-python build_mtgtop8_baseline.py --format Standard
+python mtg.py build-mtgtop8-baseline --format Standard
 ```
 
 It pulls the current metagame from mtgtop8 (server-rendered, no browser): archetype share into `baselines/meta_baseline_mtgtop8_<format>.json`, and a modal decklist per archetype into `archetype_refs.json` so the classifier has references on a fresh install. It's additive, so it never clobbers a reference you've refined locally. Re-seed after every ban and every set release.
@@ -190,7 +190,7 @@ On one run it took the unnamed share of a post-ban field from 42% to 24%.
 **From your own scrape:**
 
 ```
-python build_baseline.py --label "Week 4, post-Spotlight"
+python mtg.py build-baseline --label "Week 4, post-Spotlight"
 ```
 
 Reads the standings CSV from `MTG_DATA_DIR` and appends a snapshot to `baselines/meta_baseline_<era_slug>.json`. A ban starts a new baseline file, so a week-over-week delta can't compare live decks against banned ones.
@@ -206,10 +206,10 @@ The answers move grades, which is why they're collected first. A sound read whos
 **It remembers.** Every finding is appended to `play_log.jsonl`, one object per game, and `play_profile.py` counts it:
 
 ```
-python play_profile.py                 # roll up, rewrite the profile note
-python play_profile.py --validate      # check the ledger, write nothing
-python play_profile.py --dry-run       # print the profile, write nothing
-python play_profile.py --json          # the counts, for answering a question
+python mtg.py play-profile                 # roll up, rewrite the profile note
+python mtg.py play-profile --validate      # check the ledger, write nothing
+python mtg.py play-profile --dry-run       # print the profile, write nothing
+python mtg.py play-profile --json          # the counts, for answering a question
 ```
 
 What the counting buys you:
@@ -229,11 +229,11 @@ What the counting buys you:
 `rules-check` quotes the Comprehensive Rules rather than reciting them. `rules_lookup.py` finds the current dated CR text file on the WotC rules page, caches it beside the scripts, and refreshes after 14 days or when a newer one is published.
 
 ```
-python rules_lookup.py 117.3b            # one rule, verbatim
-python rules_lookup.py 704               # a whole section
-python rules_lookup.py --search "split second"
-python rules_lookup.py --glossary "deathtouch"
-python rules_lookup.py --version         # what's cached, and how old
+python mtg.py rules-lookup 117.3b            # one rule, verbatim
+python mtg.py rules-lookup 704               # a whole section
+python mtg.py rules-lookup --search "split second"
+python mtg.py rules-lookup --glossary "deathtouch"
+python mtg.py rules-lookup --version         # what's cached, and how old
 ```
 
 Stdlib only, no browser. Every result prints the CR version alongside it, because the rules are revised with every set and an answer you can't date is an answer you can't re-check.

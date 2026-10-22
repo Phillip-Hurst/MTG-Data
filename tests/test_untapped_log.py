@@ -10,9 +10,8 @@ import os
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, SCRIPT_DIR)
 
-import untapped_log as ul
+from mtg_data.review import untapped_log as ul
 
 
 def _card(grp, title, types, *texts):
@@ -135,7 +134,7 @@ def test_a_minimal_log_parses_into_one_game_with_its_hand_and_result():
 
 
 def test_untapped_logs_never_ship_or_commit():
-    import package
+    import build_plugin as package
     from pathlib import Path
     assert not package.should_ship(Path("untapped_logs/PLACEHOLDER0000.json"))
     with open(os.path.join(SCRIPT_DIR, ".gitignore"), encoding="utf-8") as fh:

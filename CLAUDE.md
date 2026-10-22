@@ -42,7 +42,7 @@ sounds obvious and it's the source of most of this project's bugs, so it's writt
 down.
 
 ```
-melee.gg ──> mtg_fetch.py ──> melee_<fmt>_<id>_pairings.csv   <- source of truth
+melee.gg ──> fetch_melee.py ──> melee_<fmt>_<id>_pairings.csv   <- source of truth
                                 melee_<fmt>_<id>_standings.csv
                                 melee_deck_cache.json
 MTGO     ──> fetch_mtgo.py ──> mtgo_challenge_latest.json
@@ -111,7 +111,7 @@ because `mtg_stats.classify_row` reads deck names straight off the CSV row.
 unfamiliar ones. The cards you "know" from coverage or from a vault note are the
 dangerous ones. Confident and wrong is worse than asking.
 
-**2. Check the era before quoting a number.** Run `python mtg_era.py`. An era is the
+**2. Check the era before quoting a number.** Run `python mtg.py era`. An era is the
 stretch over which results are comparable, and it ends on a set release or a ban. A
 ban is the dangerous one: filenames don't change, archetype names don't change, and a
 62% win rate against a deck that can't be registered still reads like a fact.
@@ -124,7 +124,7 @@ point at `validate_events.py` instead of reporting the number.
 every card test and is not the format you're analyzing. So does a Modern team-trios
 event on the seat records. Judge events by what they are.
 
-**5. `archetype_names.json` is the vocabulary.** Those are the canonical names every
+**5. `config/archetype_names.json` is the vocabulary.** Those are the canonical names every
 source resolves onto, through `mtg_stats.ARCHETYPE_ALIASES`. Point an alias at a name
 the manifest doesn't carry and you split a deck instead of merging it. A test fails if
 you try. The archetype notes in
@@ -173,7 +173,7 @@ they'll tell you what you forgot.
 | Reviewing your own games | `skills/vod-review/SKILL.md` |
 | The play ledger, the trend bar, what pace can be measured | `skills/vod-review/reference/play-profile.md` |
 | Rules and the stack | `skills/rules-check/SKILL.md` and its `reference/` |
-| The canonical archetype names | `archetype_names.json` |
+| The canonical archetype names | `config/archetype_names.json` |
 | Version history | `CHANGELOG.md` |
 
 **Keep this file under 2,000 tokens.** If an edit pushes past that, move something

@@ -45,7 +45,7 @@ sentence. A file that could not be read means the rebuild refused and the pool
 you are reading is the previous one, which is worth more than a sentence.
 
 **Never edit the combined CSVs.** They are derived. Anything that looks wrong in
-them is wrong in a per-event file or in a verdict, and `python combine_events.py`
+them is wrong in a per-event file or in a verdict, and `python mtg.py combine-events`
 rebuilds them from those. Before 2026-09-08 the combined files were filtered in
 place and lost rows on every run.
 
@@ -56,12 +56,12 @@ place and lost rows on every run.
 Step 3.5 below covers how to *write* about a card once you've found it. `card_signal.py` is how you find it. Run it before writing the "Cards to watch" section — that section should come out of this, not out of impressions.
 
 ```bash
-python card_signal.py                       # all five lenses, current era
-python card_signal.py --lens rogue          # just the deckbuilding shortlist
-python card_signal.py --lens adoption --board side   # what the field is boarding
-python card_signal.py --archetype "Mono-Green"   # deviations in one deck
-python card_signal.py --archetype "Dimir Midrange" --lens adoption
-python card_signal.py --write               # save a note
+python mtg.py card-signal                       # all five lenses, current era
+python mtg.py card-signal --lens rogue          # just the deckbuilding shortlist
+python mtg.py card-signal --lens adoption --board side   # what the field is boarding
+python mtg.py card-signal --archetype "Mono-Green"   # deviations in one deck
+python mtg.py card-signal --archetype "Dimir Midrange" --lens adoption
+python mtg.py card-signal --write               # save a note
 ```
 
 **rogue** — under 8% of the field is on the card, and the pilots who are finish above average. This is the deckbuilding shortlist: slots you could change tomorrow. Each row names where the card lives, so a rogue inclusion in a known archetype and one in an unnamed shell both surface.
@@ -107,18 +107,18 @@ A ban is the more dangerous of the two, because nothing about the data looks dif
 **Run this before any analysis:**
 
 ```
-python mtg_era.py
+python mtg.py era
 ```
 
-It prints the current era, the date it started, why it started there, and what the previous era was. The window start comes from whichever is later: the newest set release in `set_releases.json`, or the newest B&R announcement for this format in `bans.json`. `mtg_fetch.py` and `build_baseline.py` both anchor on it.
+It prints the current era, the date it started, why it started there, and what the previous era was. The window start comes from whichever is later: the newest set release in `config/set_releases.json`, or the newest B&R announcement for this format in `config/bans.json`. `fetch_melee.py` and `build_baseline.py` both anchor on it.
 
-**Don't take the era from this file; run `mtg_era.py`.** As of 2026-10-17 the Standard era is Reality Fracture, from its Arena release on 2026-09-29, and the 2026-10-12 B&R made no Standard change. The last Standard bans were 2026-08-10: Badgermole Cub, Stormchaser's Talent and Gran-Gran (Selesnya Offense, Izzet Prowess and Jeskai Lessons lost a card). This line went stale once already: it named the post-ban era for a week after Reality Fracture had replaced it. When a set lands, add it to `set_releases.json` and refresh the card pool (`build_card_pool.py --max-age-days 0`) the same day, or `validate_events.py` quarantines the new set's events as off-format.
+**Don't take the era from this file; run `era.py`.** As of 2026-10-17 the Standard era is Reality Fracture, from its Arena release on 2026-09-29, and the 2026-10-12 B&R made no Standard change. The last Standard bans were 2026-08-10: Badgermole Cub, Stormchaser's Talent and Gran-Gran (Selesnya Offense, Izzet Prowess and Jeskai Lessons lost a card). This line went stale once already: it named the post-ban era for a week after Reality Fracture had replaced it. When a set lands, add it to `config/set_releases.json` and refresh the card pool (`build_card_pool.py --max-age-days 0`) the same day, or `validate_events.py` quarantines the new set's events as off-format.
 
 ### When a ban lands
 
-1. Add the announcement to `bans.json` (effective date, format, cards, decks hit, the WotC URL).
-2. `python archive_era.py --dry-run`, then `python archive_era.py`. That moves every scraped CSV, the MTGO dumps, and the closing era's baseline into `archive/through-YYYY-MM-DD/` with a manifest. The analysis scripts glob the data folder non-recursively, so this is what actually takes the old data out of the live pool.
-3. `python mtg_fetch.py`. The window now opens at the ban date, so the new scrape only pulls post-ban events.
+1. Add the announcement to `config/bans.json` (effective date, format, cards, decks hit, the WotC URL).
+2. `python mtg.py archive-era --dry-run`, then `python mtg.py archive-era`. That moves every scraped CSV, the MTGO dumps, and the closing era's baseline into `archive/through-YYYY-MM-DD/` with a manifest. The analysis scripts glob the data folder non-recursively, so this is what actually takes the old data out of the live pool.
+3. `python mtg.py fetch-melee`. The window now opens at the ban date, so the new scrape only pulls post-ban events.
 4. Freeze the archetype files: rename the live `## Matchup data` heading to `## Matchup data (pre-ban, through YYYY-MM-DD)` and add a ban banner to every deck that ran a banned card. Don't delete anything.
 
 ### Reading data from the archive
@@ -157,7 +157,7 @@ Fetch `https://magic.wizards.com/en/formats/standard` first, every time.
 
 Note which sets are currently legal, the release date of the most recent set, and anything listed as "Coming Soon" (not yet legal). Every card reference in the analysis must come from a currently legal set. If a card is from a set outside your training coverage, say so — don't guess.
 
-**Then check the ban list.** Fetch `https://magic.wizards.com/en/banned-restricted-list` and compare it against `bans.json`. A legal set is not the same thing as a legal card, and this is the failure mode that produces confident, useless advice: recommending a deck built around a card that got banned. If the live list has a change `bans.json` doesn't, add it before going any further — the window start and the whole data split depend on that file being current.
+**Then check the ban list.** Fetch `https://magic.wizards.com/en/banned-restricted-list` and compare it against `config/bans.json`. A legal set is not the same thing as a legal card, and this is the failure mode that produces confident, useless advice: recommending a deck built around a card that got banned. If the live list has a change `config/bans.json` doesn't, add it before going any further — the window start and the whole data split depend on that file being current.
 
 **Never recommend a banned card.** Currently banned in Standard as of 2026-08-10: Badgermole Cub, Stormchaser's Talent, Gran-Gran. If a decklist in the data or in a vault note runs one of those, that list is a historical artifact. Say so.
 
@@ -198,13 +198,13 @@ If you can't reach Scryfall for any reason, say: "I haven't verified [card] this
 
 ## Step 1: Gather tournament results — last 4 weeks
 
-Read local scrape output first — that's the primary data source. The Playwright scrapers (`mtg_fetch.py` for melee, `fetch_mtgo.py` for MTGO) run on the user's machine and produce the CSV and JSON files this analysis works from. Cowork reads what they produce; it does not pull melee or MTGO data live.
+Read local scrape output first — that's the primary data source. The Playwright scrapers (`fetch_melee.py` for melee, `fetch_mtgo.py` for MTGO) run on the user's machine and produce the CSV and JSON files this analysis works from. Cowork reads what they produce; it does not pull melee or MTGO data live.
 
 What you can supplement with a live fetch in a Cowork session: mtgtop8 (server-rendered) and magic.gg Metagame Mentor articles. Everything else needs the local scrapers to have run first.
 
 ### Sources
 
-**melee.gg** — Primary source for decklists and round-by-round matchup records. **Requires the local Playwright scraper.** melee.gg is JavaScript-rendered and OAuth-gated; a plain fetch returns a shell. All melee data comes from `mtg_fetch.py` (discovery + scheduling) and `melee_scraper.py` (per-tournament round data), which drive a real browser on the user's machine. The output lands in the format's `scrapes/` folder as `melee_<format>_all_pairings.csv` and `melee_<format>_all_standings.csv`.
+**melee.gg** — Primary source for decklists and round-by-round matchup records. **Requires the local Playwright scraper.** melee.gg is JavaScript-rendered and OAuth-gated; a plain fetch returns a shell. All melee data comes from `fetch_melee.py` (discovery + scheduling) and `melee_scraper.py` (per-tournament round data), which drive a real browser on the user's machine. The output lands in the format's `scrapes/` folder as `melee_<format>_all_pairings.csv` and `melee_<format>_all_standings.csv`.
 - Individual decklists at `https://melee.gg/Decklist/View/{uuid}` render as static HTML and can be fetched live if you have a specific UUID.
 
 **MTGO** — Two types of data, both from the local `fetch_mtgo.py` scraper. MTGO decklist pages are JavaScript-rendered; a plain fetch returns a loading shell, not cards. **Requires the local Playwright scraper.**
@@ -293,11 +293,11 @@ Filter out small locals and casual store events (fewer than ~30 players). MTGO l
 
 The analysis uses three windows.
 
-- **Recent window**: the last 2–3 weeks of current-era events. Run `mtg_fetch.py --since YYYY-MM-DD` where the date is 2–3 weeks ago. This is the live meta — what's winning right now.
-- **Current era window**: everything from the era start to today. Run `mtg_fetch.py` without flags. This is the full picture of how the meta developed since the last reset, whether that reset was a set release or a ban.
+- **Recent window**: the last 2–3 weeks of current-era events. Run `fetch_melee.py --since YYYY-MM-DD` where the date is 2–3 weeks ago. This is the live meta — what's winning right now.
+- **Current era window**: everything from the era start to today. Run `fetch_melee.py` without flags. This is the full picture of how the meta developed since the last reset, whether that reset was a set release or a ban.
 - **Prior era baseline**: the saved snapshot from the era before (`baselines/meta_baseline_[era_slug].json`, or `archive/through-YYYY-MM-DD/baselines/` once it's been frozen). This is the cross-era reference.
 
-`mtg_fetch.py` gets the window start from `mtg_era.py`, which takes the later of the newest set release and the newest B&R date for the format. The recent window cutoff is a judgment call — use 2 weeks for an active meta, 3 weeks if events have been thin.
+`fetch_melee.py` gets the window start from `era.py`, which takes the later of the newest set release and the newest B&R date for the format. The recent window cutoff is a judgment call — use 2 weeks for an active meta, 3 weeks if events have been thin.
 
 If the era just started (fewer than ~10 events total), don't force a recent-vs-earlier split — there's nothing meaningful to diff yet. Report the full era window only and note the sample size. After a ban this will be the normal state for two or three weeks; say the sample is small rather than dressing it up.
 
@@ -308,20 +308,20 @@ If the era just started (fewer than ~10 events total), don't force a recent-vs-e
 Tournament data comes from melee.gg directly. Tell the user to run:
 
 > ```
-> python mtg_fetch.py
+> python mtg.py fetch-melee
 > ```
 >
-> This searches melee.gg/Tournaments for Standard events with published decklists since the latest set release (window start comes from `set_releases.json`) and scrapes them automatically. Both scripts are in `Skills/mtg-tournament-analysis/`.
+> This searches melee.gg/Tournaments for Standard events with published decklists since the latest set release (window start comes from `config/set_releases.json`) and scrapes them automatically. Run it from the plugin's root folder, where `mtg.py` is.
 >
 > Flags: `--since YYYY-MM-DD` (tighter window), `--dry-run` (see what it found without scraping).
 >
-> To target a specific event instead: `python melee_scraper.py 393283 339227`
+> To target a specific event instead: `python mtg.py melee-scraper 393283 339227`
 
 Wait for the user to paste the CSV before proceeding to Step 2. If they paste it, skip straight to matrix building.
 
 **Staleness check (mandatory before using on-disk data):** check the newest event date in the combined pairings file (`melee_<format>_all_pairings.csv`, e.g. `melee_standard_all_pairings.csv`) and the `date` fields in `mtgo_*_latest.json` before treating them as current. If the newest data is older than the recent window, say so plainly ("local data ends YYYY-MM-DD") and ask the user to run the fetch scripts rather than presenting old data as the live meta. The scheduled scrape can fail silently — file dates are the only honest signal.
 
-**Era check (also mandatory):** run `python mtg_era.py` and confirm the data folder holds data from *this* era. Right after a ban the folder is empty by design — `archive_era.py` moved the old files out. An empty data folder means "no post-ban data scraped yet," not "no data exists." Say which of those it is. Do not reach into `archive/` to fill the gap and present it as current.
+**Era check (also mandatory):** run `python mtg.py era` and confirm the data folder holds data from *this* era. Right after a ban the folder is empty by design — `archive_era.py` moved the old files out. An empty data folder means "no post-ban data scraped yet," not "no data exists." Say which of those it is. Do not reach into `archive/` to fill the gap and present it as current.
 
 ---
 
@@ -351,7 +351,7 @@ The scraper produces two CSVs:
 **`melee_<format>_all_standings.csv`** — one row per player per round:
 `tournament_id, tournament_name, round, rank, player, deck_name, deck_url, match_record, game_record, points, omw_pct, tgw_pct, ogw_pct`
 
-To build the matchup matrix, run `python matchup_matrix.py`. It reads the
+To build the matchup matrix, run `python mtg.py matchup-matrix`. It reads the
 validated pool through `combine_events.load_pool` and names every deck through
 `deck_labels`, so the matrix speaks the same vocabulary as the meta-share table
 instead of whatever each organizer typed. It prints the pool line and the label
@@ -453,7 +453,7 @@ For each archetype with data in both windows:
 - Archetypes new to this era — not present in the prior baseline at all
 - Archetypes that dropped out or declined sharply
 
-**When the break was a ban, name the mechanism.** A deck that fell off a cliff because its 4-of got banned is not a metagame trend, and reporting it as one is misleading. Check `bans.json` for `decks_hit` and separate the two groups: decks that lost cards, and decks whose share moved because the field around them changed. The second group is the interesting one.
+**When the break was a ban, name the mechanism.** A deck that fell off a cliff because its 4-of got banned is not a metagame trend, and reporting it as one is misleading. Check `config/bans.json` for `decks_hit` and separate the two groups: decks that lost cards, and decks whose share moved because the field around them changed. The second group is the interesting one.
 
 **If no prior baseline exists** (first era the skill has tracked): skip this layer, label it "no prior baseline available," and say which baseline is the first reference point.
 
@@ -503,7 +503,7 @@ The baseline file for the current era (`baselines/meta_baseline_[era_slug].json`
 
 When running Layer 1, compare the most recent snapshot against the previous one. The `label` field is how you know what kind of events each snapshot covers.
 
-**Re-run `build_baseline.py`** (in `Skills/mtg-tournament-analysis/`, next to the scrapers) after any major scrape. It reads the combined standings file (`melee_<format>_all_standings.csv`) and appends a new snapshot entry to the current era's baseline file, stamping each snapshot with its era slug and start date.
+**Re-run `python mtg.py build-baseline --label "..."`** after any major scrape. It reads the combined standings file (`melee_<format>_all_standings.csv`) and appends a new snapshot entry to the current era's baseline file, stamping each snapshot with its era slug and start date.
 
 ### Goto-list baseline check
 
@@ -732,7 +732,7 @@ If a script broke, a site changed its layout, or the analysis missed something r
 **What to include:**
 
 - What you were trying to do
-- Which script failed (`mtg_fetch.py`, `fetch_mtgo.py`, `melee_scraper.py`, etc.)
+- Which script failed (`fetch_melee.py`, `fetch_mtgo.py`, `melee_scraper.py`, etc.)
 - The full error message or wrong output (paste it)
 - Your OS and Python version (`python --version`)
 - The date you ran it (site structures change)

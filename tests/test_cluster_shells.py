@@ -10,8 +10,8 @@ import json
 
 import pytest
 
-import cluster_shells as cs
-import refs_store
+from mtg_data.classify import cluster_shells as cs
+from mtg_data.classify import refs_store
 
 
 def landfall(extra=None, n=4):

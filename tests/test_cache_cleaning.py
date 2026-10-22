@@ -21,9 +21,8 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import validate_events as ve   # noqa: E402
+from mtg_data.quality import validate_events as ve
 
 
 CUTOFF = dt.datetime(2026, 8, 10)

@@ -15,9 +15,8 @@ import sys
 import pytest
 
 SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, SCRIPT_DIR)
 
-import deck_labels as dl  # noqa: E402
+from mtg_data.classify import deck_labels as dl
 
 
 class FakeVerdict:

@@ -88,9 +88,9 @@ five traps, three of which have already put a wrong finding into a shipped revie
 pulls and parses without a browser:
 
 ```bash
-python untapped_log.py matches --user <userId> --player <playerTag> --set FRA --constructed
-python untapped_log.py fetch --from-matches --constructed --since 2026-10-01
-python untapped_log.py parse --from-matches --constructed --since 2026-10-01
+python mtg.py untapped-log matches --user <userId> --player <playerTag> --set FRA --constructed
+python mtg.py untapped-log fetch --from-matches --constructed --since 2026-10-01
+python mtg.py untapped-log parse --from-matches --constructed --since 2026-10-01
 ```
 
 `parse` writes `<shortId>.txt` (a hand and board snapshot at the start of every turn,
@@ -216,8 +216,8 @@ which one you were facing.
    rather than inventing a name.
 3. **Use the meta's names, for both decks.** The user's deck gets an archetype name
    too, not the title it has in their client ("New Deck (5)", "Spidey Control"). In
-   order: `archetype_names.json` (the canonical list), then
-   `archetype_vocabulary.json` (MTGGoldfish's names and defining cards), then
+   order: `config/archetype_names.json` (the canonical list), then
+   `config/archetype_vocabulary.json` (MTGGoldfish's names and defining cards), then
    untapped's archetype names for Arena-only shells ("Jeskai Superfriends", "Mono-Blue
    Jace"). Only when none fits does a deck go in as `Unnamed (<five-word shell>)`, and
    it goes to `deck-check` in the same breath. The profile splits on these names, so
@@ -225,7 +225,7 @@ which one you were facing.
 4. Pull the archetype note from
    `skills/mtg-tournament-analysis/reference/archetypes/` for both. That's where the
    game plan, the key cards, and the known matchup numbers live.
-5. **Check the era.** Run `python mtg_era.py`. A review of a game from a dead format
+5. **Check the era.** Run `python mtg.py era`. A review of a game from a dead format
    is a history lesson, which is fine, and it should say so. A matchup number quoted
    from before a ban is not fine.
 
@@ -289,7 +289,7 @@ written against a deck you didn't look up.
    the card list from the reveals alone. Don't fabricate an archetype's contents from
    the name. **This is the normal state on a fresh install**: the notes are local
    working notes and the plugin ships none of them, only the canonical names in
-   `archetype_names.json`. A review with no note behind it is still a review; it just
+   `config/archetype_names.json`. A review with no note behind it is still a review; it just
    says which cards it had to learn from the game itself, and writes the note
    afterwards so the next one starts ahead.
 
@@ -370,7 +370,7 @@ reasons:
   review, and it's a review the player can disagree with using the same numbers.
 - **The hands accumulate into an index.** Across a dozen reviews the ledger answers
   "what am I actually keeping against this deck" with a count instead of an
-  impression. `python play_profile.py --hands` prints it.
+  impression. `python mtg.py play-profile --hands` prints it.
 
 **Record what the hand was made of, not just lands and spells.** `composition` puts
 every card in one slot: `lands`, `threats`, `interaction`, `card_advantage`, `other`.
@@ -526,7 +526,7 @@ project: MTG Tournament Analysis Skill
 date: YYYY-MM-DD
 tags: [mtg, vod-review, {your-deck-slug}]
 source: {untapped:<shortId> per match | YouTube video ID | pasted log}
-era: {output of mtg_era.py}
+era: {output of era.py}
 ---
 
 # {Your deck} vs {Their deck} — {date}
@@ -638,7 +638,7 @@ drifts between the note and the ledger with nothing able to notice.
 1. **Append one line per game to `play_log.jsonl`** in the insights folder. One object
    per game, not per match. The full schema is in `reference/play-profile.md`.
 
-   **Every finding names a `pattern_id` from `play_patterns.json`.** That registry is
+   **Every finding names a `pattern_id` from `config/play_patterns.json`.** That registry is
    the vocabulary the profile counts, and an id that isn't in it gets the line
    rejected rather than counted under a name nothing else uses. If the behaviour you
    found genuinely isn't in the registry, add it there first, with a `kind`, a
@@ -705,7 +705,7 @@ drifts between the note and the ledger with nothing able to notice.
    sample each number came from.
 
    A ledger written before the field existed still validates: `format` is
-   optional and inferred from the era slug. `python migrate_play_log_format.py
+   optional and inferred from the era slug. `python mtg.py migrate-play-log-format
    --dry-run` shows what it would stamp, and writes a `.pre-format.jsonl` backup
    when you let it run.
 
@@ -720,11 +720,11 @@ drifts between the note and the ledger with nothing able to notice.
    you report it.
 
    ```bash
-   python play_profile.py                 # roll up, write the profiles
-   python play_profile.py --validate      # check the ledger, write nothing
-   python play_profile.py --dry-run       # print the profile, write nothing
-   python play_profile.py --json          # the counts, for answering a question
-   python play_profile.py --hands         # the kept-hand index, card by card
+   python mtg.py play-profile                 # roll up, write the profiles
+   python mtg.py play-profile --validate      # check the ledger, write nothing
+   python mtg.py play-profile --dry-run       # print the profile, write nothing
+   python mtg.py play-profile --json          # the counts, for answering a question
+   python mtg.py play-profile --hands         # the kept-hand index, card by card
    ```
 
 3. **Read the exit code and repeat what it said.** `0` clean, `1` couldn't run,
@@ -781,7 +781,7 @@ names nothing.
 
 **The ledger and the profile notes don't ship and don't go in the repo.** They're the
 user's play history and the repo is public. `package.py` and `.gitignore` both exclude
-them, with a test pinning it. `play_patterns.json` does ship: it's a vocabulary of how
+them, with a test pinning it. `config/play_patterns.json` does ship: it's a vocabulary of how
 Magic decisions go wrong, true regardless of who was holding the cards.
 
 ---
@@ -803,14 +803,14 @@ Magic decisions go wrong, true regardless of who was holding the cards.
 answerable straight from the ledger. Skip Steps 1 through 6 and run the rollup:
 
 ```bash
-python play_profile.py --json
+python mtg.py play-profile --json
 ```
 
 "What do I keep", "am I keeping too many two-landers", "what did I keep against that
 deck" are the same move against the hand index:
 
 ```bash
-python play_profile.py --hands
+python mtg.py play-profile --hands
 ```
 
 Answer from those counts rather than from the profile note's prose, and rather than
@@ -838,7 +838,7 @@ meant to be passed on rather than smoothed over.
 - **No pattern without a count.** Three occurrences across two sessions, or it hasn't
   cleared the bar yet. Two is Watching and one stays in the review note.
 - **A pattern, not a sentence.** Every finding names a `pattern_id` from
-  `play_patterns.json`. A behaviour described in fresh words each time cannot be
+  `config/play_patterns.json`. A behaviour described in fresh words each time cannot be
   counted, and the profile ends up printing every wording it saw.
 - **Don't manufacture mistakes.** Some games are unwinnable and some lines are just
   right. Say so. The same goes for habits: a clean profile is a legitimate result.

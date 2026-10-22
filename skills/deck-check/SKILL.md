@@ -68,7 +68,7 @@ What it guarantees is that once a shell is named, its decks stop coming back.
 
 Suggestions come from two lookups, in order:
 
-1. **`archetype_vocabulary.json`** — the format's published names, from
+1. **`config/archetype_vocabulary.json`** — the format's published names, from
    MTGGoldfish's metagame table: archetype, meta share, and the three cards that
    define it. Two of three defining cards in a shell's core is a match worth
    prefilling; one is shown but flagged weak, because Deceit defines two
@@ -76,7 +76,7 @@ Suggestions come from two lookups, in order:
 2. **the melee cache** — what organizers typed for lists with a similar core.
    Useful for decks too new or too fringe to be catalogued yet.
 
-Refresh the vocabulary with `python fetch_vocabulary.py` after any set release or
+Refresh the vocabulary with `python mtg.py fetch-vocabulary` after any set release or
 B&R announcement. **It's also the cheapest check on whether a deck actually
 died.** On 2026-09-07 that table showed Izzet Prowess alive at 1.0% and 13 decks
 after Stormchaser's Talent was banned — a ban deletes a card, and whether the
@@ -109,11 +109,11 @@ A skipped deck comes back next run. Nothing is lost by deferring.
 ## Running it
 
 ```bash
-python apply_corrections.py             # read notes, apply everywhere
-python apply_corrections.py --dry-run   # see what would change
-python apply_corrections.py --list      # what's already been ruled on
-python apply_corrections.py --reapply   # after a scrape, restore the rulings
-python build_refs_from_melee.py --rebuild-only   # feed rulings into future matching
+python mtg.py apply-corrections             # read notes, apply everywhere
+python mtg.py apply-corrections --dry-run   # see what would change
+python mtg.py apply-corrections --list      # what's already been ruled on
+python mtg.py apply-corrections --reapply   # after a scrape, restore the rulings
+python mtg.py build-refs-from-melee --rebuild-only   # feed rulings into future matching
 ```
 
 Reads every note it finds, skips entries already recorded, safe to re-run. It prints each folder it searched with a count and **exits non-zero when it finds nothing**, rather than reporting success on an empty run.
@@ -121,8 +121,8 @@ Reads every note it finds, skips entries already recorded, safe to re-run. It pr
 Notes written before 2026-08-29 have no `Decision:` line. Add them, pre-filled:
 
 ```bash
-python apply_corrections.py --backfill --dry-run
-python apply_corrections.py --backfill
+python mtg.py apply-corrections --backfill --dry-run
+python mtg.py apply-corrections --backfill
 ```
 
 ## Where a correction lands, and why that matters
@@ -144,8 +144,8 @@ Three sources, in order of how much work they cost:
 
 | Source | Command | Gives you |
 |---|---|---|
-| **mtgtop8** | `python build_mtgtop8_baseline.py --format Standard` | Meta share plus real decklists for the top archetypes, server-rendered HTML, stdlib fetch, no browser. **Start here.** |
-| local melee cache | `python build_refs_from_melee.py --rebuild-only` | References for whatever your own scrapes have covered. Better lists, far narrower coverage. |
+| **mtgtop8** | `python mtg.py build-mtgtop8-baseline --format Standard` | Meta share plus real decklists for the top archetypes, server-rendered HTML, stdlib fetch, no browser. **Start here.** |
+| local melee cache | `python mtg.py build-refs-from-melee --rebuild-only` | References for whatever your own scrapes have covered. Better lists, far narrower coverage. |
 | MTGGoldfish | — | Fetchable for meta share, but duplicates what mtgtop8 gives and its decklists sit behind more layers. Cross-check only. |
 
 mtgdecks.net returns HTTP 403 behind Cloudflare. Don't build on it.
@@ -166,13 +166,13 @@ Two controls matter:
 ## Auditing the references
 
 ```bash
-python audit_refs.py                      # full report
-python audit_refs.py --strict             # exit 1 on any error
-python audit_refs.py --apply-aliases --dry-run
-python audit_refs.py --apply-aliases      # collapse duplicates
+python mtg.py audit-refs                      # full report
+python mtg.py audit-refs --strict             # exit 1 on any error
+python mtg.py audit-refs --apply-aliases --dry-run
+python mtg.py audit-refs --apply-aliases      # collapse duplicates
 ```
 
-`mtg_fetch.py` runs the report after every scrape. What it catches:
+`fetch_melee.py` runs the report after every scrape. What it catches:
 
 - **banned / off-format references.** A reference built from the wrong era renames live decks to something that can't be registered.
 - **collisions.** Two references sharing 60%+ of their slots produce near-tied match scores, and `classify_decks` picks on raw slot overlap with no margin — so a tie resolves by dictionary order. This is the documented root cause of the review-queue flood. When one card genuinely separates the pair, `"requires"` settles it; when nothing does, they're one archetype and want an alias.
@@ -182,7 +182,7 @@ python audit_refs.py --apply-aliases      # collapse duplicates
 
 `--apply-aliases` collapses labels that `mtg_stats.ARCHETYPE_ALIASES` says are one deck, keeping whichever reference was built from more lists, and backs up to `archetype_refs.pre-alias.json`. Re-run `classify_decks.py --rerun` afterwards so live decks pick up the merged names.
 
-**The canonical name is always one carried by `archetype_names.json`.** That file is the vocabulary the matchup tables, snapshots and win-rate numbers are written in. Adding an alias for a name it doesn't carry splits a deck instead of merging it, and a test fails if you try.
+**The canonical name is always one carried by `config/archetype_names.json`.** That file is the vocabulary the matchup tables, snapshots and win-rate numbers are written in. Adding an alias for a name it doesn't carry splits a deck instead of merging it, and a test fails if you try.
 
 The archetype notes in `skills/mtg-tournament-analysis/reference/archetypes/` are local working notes rather than shipped content, so a fresh install has the names and none of the notes. Never treat a missing note as a missing archetype.
 
@@ -203,9 +203,9 @@ A collision the aliases don't resolve is a real question about what a deck *is*,
 That's one archetype with no name, not 37 brews. To bring it in:
 
 1. **Name it** by what the deck does, not by its colours. mtgtop8 filed the Amalia deck as "Orzhov Aggro"; it gains life, so it's Orzhov Lifegain.
-2. **Add the name to `archetype_names.json`**, then **write the note** in `reference/archetypes/`. The manifest is what ships and what the alias test checks; the note is the local detail. Card text from Scryfall — a note describing cards from memory reads as authoritative and isn't. Say which cards are unverified rather than guessing.
-3. **Add the alias** in `mtg_stats.py` so every source's spelling resolves to the new name.
-4. `python build_refs_from_melee.py --rebuild-only` picks it up once enough decks carry the label. Anything it keeps mismatching comes back through the review note.
+2. **Add the name to `config/archetype_names.json`**, then **write the note** in `reference/archetypes/`. The manifest is what ships and what the alias test checks; the note is the local detail. Card text from Scryfall — a note describing cards from memory reads as authoritative and isn't. Say which cards are unverified rather than guessing.
+3. **Add the alias** in `stats.py` so every source's spelling resolves to the new name.
+4. `python mtg.py build-refs-from-melee --rebuild-only` picks it up once enough decks carry the label. Anything it keeps mismatching comes back through the review note.
 
 A shell finishing better than the field with 10+ pilots is worth naming this week. One with 4 pilots and a worse-than-field record can wait.
 
