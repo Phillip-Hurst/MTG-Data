@@ -54,6 +54,10 @@ import re
 import sys
 from datetime import date, datetime, timedelta
 
+from mtg_data.classify import deck_labels
+from mtg_data.core import era as mtg_era
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+
 # Windows consoles default to cp1252 and choke on box-drawing and accented
 # characters in deck and player names. Force UTF-8 where the stream supports it.
 for _stream in (sys.stdout, sys.stderr):
@@ -62,20 +66,14 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# Importable no matter where this is run from — the scheduled task and the
-# by-hand run don't share a working directory.
-
-from mtg_data.core import era as mtg_era
-from mtg_data.classify import deck_labels
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
-# Data is read from MTG_DATA_DIR (defaults to the script folder so the flat
-# single-format workflow is unchanged). setup.py points it at a per-format folder.
+# Data is read from MTG_DATA_DIR (defaults to the checkout root, the flat
+# single-format workflow). setup_workspace.py points it at a per-format folder.
 DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 
 
 def _find_config(name):
-    """Look in the data folder first, fall back to the shipped copy next to the
-    scripts. Lets each format carry its own set_releases.json without forcing it."""
+    """Look in the data folder first, fall back to the versioned copy in
+    config/. Lets each format carry its own set_releases.json without forcing it."""
     p = os.path.join(DATA_DIR, name)
     return p if os.path.exists(p) else os.path.join(CONFIG_DIR, name)
 

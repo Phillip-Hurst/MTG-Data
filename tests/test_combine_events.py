@@ -21,14 +21,12 @@ every time, with the verdicts applied, and nothing filters them in place.
 import csv
 import json
 import os
-import sys
 
 import pytest
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 from mtg_data.quality import combine_events as ce
 
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 

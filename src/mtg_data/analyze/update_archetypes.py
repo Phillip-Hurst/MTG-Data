@@ -9,13 +9,18 @@ scrape. (Earlier versions carried a fixed May-12 write-up; that was removed
 2026-06-12 because it stamped stale prose with the current date.)
 """
 import argparse
-import csv, os, glob, collections, re, json, sys
+import collections
+import glob
+import json
+import os
+import re
+import sys
 from datetime import datetime
 
-from mtg_data.quality import combine_events
 from mtg_data.classify import deck_labels
-from mtg_data.core.stats import classify_row, win_pct
 from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from mtg_data.core.stats import classify_row, win_pct
+from mtg_data.quality import combine_events
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
 # characters in deck names. Force UTF-8 where the stream supports it.
@@ -25,8 +30,8 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# Scraped CSVs come from MTG_DATA_DIR (defaults to the script folder so the flat
-# single-format workflow is unchanged). setup.py sets it per format.
+# Scraped CSVs come from MTG_DATA_DIR (defaults to the checkout root, the flat
+# single-format workflow). setup_workspace.py sets it per format.
 DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 FORMAT = os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard"
 FMT_SLUG = FORMAT.lower()
@@ -157,7 +162,7 @@ def matchup_section(deck, deck_games, deck_wins, deck_losses, deck_draws, matchu
     if opponents:
         lines.append("| Opponent | Win% | N | Notes |")
         lines.append("|---|---:|---:|---|")
-        for opp, n, w, opp_wr in opponents:
+        for opp, n, _wins, opp_wr in opponents:
             note = "small sample" if n < 20 else ""
             lines.append(f"| {opp} | {opp_wr:.1f}% | {n} | {note} |")
     else:
@@ -177,7 +182,7 @@ def update_files(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, t
         slug = re.sub(r"^\[C\]\s*", "", fname).replace(".md", "").strip()
         # Find matching data key
         data_key = None
-        for k in deck_games.keys():
+        for k in deck_games:
             slug_for_k = NAME_TO_FILENAME.get(k, k)
             if slug_for_k == slug:
                 data_key = k
@@ -273,11 +278,16 @@ def build_meta(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, tou
     lines.append("|---|---|---:|---:|---:|")
     tiered = sorted(((d, deck_games[d], wr(d)) for d in big_decks), key=lambda x: -x[2])
     for d, g, w in tiered:
-        if w >= 55:    t = "S"
-        elif w >= 52:  t = "A"
-        elif w >= 50:  t = "B"
-        elif w >= 48:  t = "C"
-        else:          t = "D"
+        if w >= 55:
+            t = "S"
+        elif w >= 52:
+            t = "A"
+        elif w >= 50:
+            t = "B"
+        elif w >= 48:
+            t = "C"
+        else:
+            t = "D"
         lines.append(f"| {t} | {d} | {g:,} | {w:.1f}% | {share(d):.1f}% |")
     lines.append("")
 
@@ -317,8 +327,8 @@ def build_meta(deck_games, deck_wins, deck_losses, deck_draws, matchup_wins, tou
         picks.append((winner, loser, wr_pct, sample))
     picks.sort(key=lambda x: -x[2])
     if picks:
-        for w, l, wp, s in picks[:15]:
-            lines.append(f"- **{w} beats {l}** — {wp:.1f}% over {s} games")
+        for winner, loser, wp, s in picks[:15]:
+            lines.append(f"- **{winner} beats {loser}** — {wp:.1f}% over {s} games")
     else:
         lines.append("_No pairing has 30+ decided games with a clear edge yet._")
     lines.append("")

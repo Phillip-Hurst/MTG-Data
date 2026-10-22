@@ -12,8 +12,7 @@ draining it. Both are regression-tested here by name.
 """
 import pytest
 
-from mtg_data.classify import classifier
-from mtg_data.classify import refs_store
+from mtg_data.classify import classifier, refs_store
 
 
 def entry(cards, **kw):

@@ -290,6 +290,7 @@ def test_the_two_4cc_references_require_inevitable_defeat():
     this test failed there instead of saying so, which made CI impossible.
     """
     import os
+
     from mtg_data.core.paths import ROOT_DIR
     path = os.path.join(os.environ.get("MTG_DATA_DIR") or ROOT_DIR, "archetype_refs.json")
     if not os.path.exists(path):

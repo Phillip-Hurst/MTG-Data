@@ -39,14 +39,9 @@ one.
 """
 import json
 import os
-import sys
 from collections import Counter, namedtuple
 
-
-from mtg_data.classify import classifier
-from mtg_data.classify import refs_store
-from mtg_data.core.paths import ROOT_DIR
-
+from mtg_data.classify import classifier, refs_store
 from mtg_data.core.stats import normalize as _alias
 
 # Organizer text that names no deck. Same list build_baseline has always used,

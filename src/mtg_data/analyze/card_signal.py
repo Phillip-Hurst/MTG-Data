@@ -79,10 +79,8 @@ import statistics
 import sys
 from datetime import date, timedelta
 
-
-from mtg_data.core.paths import resolve_data_dir, resolve_output_dir
 from mtg_data.core import era as mtg_era
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir, resolve_output_dir
 from mtg_data.ingest import build_card_pool
 
 DEFAULT_MIN_PILOTS = 3
@@ -502,7 +500,7 @@ def shell_candidates(decks, min_pilots):
         for c in d["cards"]:
             counts[c] += 1
     rows = []
-    for card, n in counts.items():
+    for card in counts:
         if card in IGNORE:
             continue
         s = card_stats(card, unnamed, len(unnamed))

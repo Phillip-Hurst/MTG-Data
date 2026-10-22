@@ -246,11 +246,11 @@ def write_runners(fmt_dir, scrapes, insights, fmt):
         f.write(f'export MTG_FORMAT="{fmt}"\n')
         f.write('# Extra flags after the script name (e.g. --since 2026-05-01,\n')
         f.write('# --dry-run) are forwarded to BOTH fetchers below.\n')
-        f.write(f'echo "Scraping melee.gg for $MTG_FORMAT ..."\n')
+        f.write('echo "Scraping melee.gg for $MTG_FORMAT ..."\n')
         f.write(f'"{py}" "{mtg}" fetch-melee --format {fmt} "$@"\n')
-        f.write(f'echo "Scraping MTGO for $MTG_FORMAT ..."\n')
+        f.write('echo "Scraping MTGO for $MTG_FORMAT ..."\n')
         f.write(f'"{py}" "{mtg}" fetch-mtgo --format {fmt} "$@"\n')
-        f.write(f'echo "Done. Data is in $MTG_DATA_DIR"\n')
+        f.write('echo "Done. Data is in $MTG_DATA_DIR"\n')
     try:
         os.chmod(sh, 0o755)
     except OSError:
@@ -349,7 +349,7 @@ def main():
     print("")
     print("  2. In Cowork, ask about the meta. Your mtgtop8 baseline is already in")
     print("     place from step 6; the local scrape fills in melee matchup data.")
-    print(f"     Point the skill at your data folder if it asks — the manifest lists every path:")
+    print("     Point the skill at your data folder if it asks — the manifest lists every path:")
     print(f"        {manifest_path}")
     print("")
     print("  Re-run scripts/setup_workspace.py any time to add another format or refresh a baseline.")

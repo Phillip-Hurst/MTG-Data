@@ -24,19 +24,20 @@ Deps:
     playwright install chromium
 """
 
-import re
-import sys
-import os
-import json
-import subprocess
 import argparse
+import json
+import os
+import re
+import subprocess
+import sys
 import time
 from datetime import datetime, timedelta
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
-from mtg_data.core.paths import resolve_data_dir, resolve_output_dir
+from playwright.sync_api import TimeoutError as PWTimeout
+from playwright.sync_api import sync_playwright
+
 from mtg_data.core import era as mtg_era
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, subprocess_env
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir, resolve_output_dir, subprocess_env
 
 # Scheduled-task console is cp1252; box-drawing chars in prints crash it.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -48,8 +49,8 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 MELEE_TOURNAMENTS  = "https://melee.gg/Tournament/Index"
 WOTC_STANDARD_URL  = "https://magic.wizards.com/en/formats/standard"
 MELEE_ID_RE        = re.compile(r'/Tournament/View/(\d+)', re.IGNORECASE)
-# Data is written to MTG_DATA_DIR (defaults to the script folder so the flat
-# single-format workflow is unchanged). setup.py sets it per format, and it
+# Data is written to MTG_DATA_DIR (defaults to the checkout root, the flat
+# single-format workflow). setup_workspace.py sets it per format, and it
 # propagates to the melee_scraper.py subprocess via the inherited environment.
 DATA_DIR           = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 
@@ -178,7 +179,7 @@ def get_window_start(since_override=None, fmt="Standard", weeks_window=8):
         print(f"  Pre-{era['start_str']} results are a different era. Archive them "
               f"with: python mtg.py archive-era")
     elif era["anchor"] == "fallback":
-        print(f"  Run: python mtg.py fetch-melee --fetch-sets   to auto-populate from WotC.")
+        print("  Run: python mtg.py fetch-melee --fetch-sets   to auto-populate from WotC.")
     return era["start"]
 
 
@@ -236,8 +237,8 @@ def fetch_set_dates_from_wotc(page):
         save_set_releases(list(existing.values()))
         print(f"  set_releases.json updated ({new_count} change(s)).")
     else:
-        print(f"  No new dates found — you may need to add them manually to set_releases.json.")
-        print(f"  Page text excerpt:")
+        print("  No new dates found — you may need to add them manually to set_releases.json.")
+        print("  Page text excerpt:")
         print(f"    {content[:600]}")
 
 
@@ -515,7 +516,7 @@ def find_tournaments(page, since_dt, fmt="Standard", debug=False, dump=False):
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(page.content())
         print(f"  Saved: melee_tournaments_network.json ({len(captured_all)} requests)")
-        print(f"  Saved: melee_tournaments_page.html")
+        print("  Saved: melee_tournaments_page.html")
 
     if undated:
         print(f"\n  Skipped {len(undated)} event(s) melee returned with no usable date:")
@@ -576,7 +577,6 @@ def _extract_from_api(captured, weeks, cutoff, found, seen, debug=False,
     if undated is None:
         undated = []
     for item in captured:
-        url  = item["url"]
         data = item["data"]
 
         # The tournament list endpoint returns a DataTables-style response
@@ -850,7 +850,7 @@ def main():
     env["MTG_FORMAT"] = fmt
     # Route the scraper's output to this format's folder. resolve_* returns the
     # env var if already set (the generated scrape.bat path), else the per-format
-    # folder from mtg_workspace.json, else the script dir — so a by-hand run still
+    # folder from mtg_workspace.json, else the checkout root — so a by-hand run still
     # sorts into the right place.
     env["MTG_DATA_DIR"] = resolve_data_dir(fmt, ROOT_DIR)
     env["MTG_OUTPUT_DIR"] = resolve_output_dir(fmt, ROOT_DIR)

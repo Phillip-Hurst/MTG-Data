@@ -64,12 +64,10 @@ import shutil
 import sys
 from datetime import datetime
 
-
-from mtg_data.core.paths import resolve_data_dir
+from mtg_data.core import era as mtg_era
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir
 from mtg_data.ingest import build_card_pool
 from mtg_data.quality import combine_events
-from mtg_data.core import era as mtg_era
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
 
 # A deck counts as legal if this share of its distinct mainboard cards sit in
 # the format's card pool. Not 100%: melee decklists carry the odd typo, and a
@@ -193,10 +191,8 @@ def has_individual_results(pairings_rows):
     way to know which seat won. One that reports each seat's own match can be
     split back apart.
     """
-    for r in pairings_rows:
-        if (r.get("winner") or "").strip() and (r.get("player2") or "").strip():
-            return True
-    return False
+    return any((r.get("winner") or "").strip() and (r.get("player2") or "").strip()
+               for r in pairings_rows)
 
 
 def validate_event(tid, name, pairings_rows, cache, pool, banned):
@@ -857,9 +853,6 @@ def main():
             print(f"    ...and {len(UNREADABLE) - 8} more")
         print("    On OneDrive this usually means cloud-only placeholders. Mark the "
               "data folder 'Always keep on this device' and re-run.")
-        report_unreadable = True
-    else:
-        report_unreadable = False
     if args.dry_run:
         print("\n--dry-run: nothing written.")
     else:
@@ -871,6 +864,12 @@ def main():
     if bad or seats:
         print(f"\n{len(bad)} event(s) quarantined, {len(seats)} salvaged as a single seat.")
         return 2
+    if UNREADABLE:
+        # An event nobody could read was never judged. Until 2.0.0 this run
+        # still printed "All events passed" and exited 0, so the pipeline
+        # carried on as if the pool were clean.
+        print(f"\nNot all events were judged: {len(UNREADABLE)} file(s) unreadable.")
+        return 1
     print("\nAll events passed.")
     return 0
 

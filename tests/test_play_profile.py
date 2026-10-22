@@ -17,10 +17,9 @@ import tempfile
 
 import pytest
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 from mtg_data.review import play_profile as pp
 
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ------------------------------------------------------------------- fixtures
 
@@ -1000,7 +999,7 @@ def test_the_shipped_registry_is_loadable_and_matches_the_reference_note():
     patterns, error = pp.load_patterns()
     assert error is None, error
     assert patterns, "the shipped registry has no patterns"
-    for pid, spec in patterns.items():
+    for spec in patterns.values():
         assert spec["kind"] in pp.KINDS
         assert spec["polarity"] in pp.POLARITIES
 

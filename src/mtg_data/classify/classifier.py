@@ -50,13 +50,9 @@ is what stops three-colour Jeskai scoring into it. `signature` is a soft nudge
 for the case where two references are genuinely close and one card settles it.
 Derive signatures with `signature_cards()` rather than guessing at them.
 """
-import os
-import sys
 from collections import namedtuple
 
-
 from mtg_data.classify import refs_store
-from mtg_data.core.paths import ROOT_DIR
 
 # Tuned on the 795-deck MTGO corpus, 2026-09-07. See the module docstring.
 MIN_COVERAGE = 0.65

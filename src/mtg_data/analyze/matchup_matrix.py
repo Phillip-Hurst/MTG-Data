@@ -6,12 +6,14 @@ deck_labels, so the matrix speaks the same vocabulary as the meta-share table
 rather than whatever each organizer typed.
 """
 import argparse
-import csv, os, glob, collections, sys
+import collections
+import os
+import sys
 
-from mtg_data.quality import combine_events
 from mtg_data.classify import deck_labels
-from mtg_data.core.stats import classify_row
 from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.stats import classify_row
+from mtg_data.quality import combine_events
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
 # characters in deck names. Force UTF-8 where the stream supports it.
@@ -21,8 +23,8 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# Scraped CSVs come from MTG_DATA_DIR (defaults to the script folder); the
-# rendered matrix is written under MTG_OUTPUT_DIR. setup.py sets both per format.
+# Scraped CSVs come from MTG_DATA_DIR (defaults to the checkout root); the
+# rendered matrix is written under MTG_OUTPUT_DIR. setup_workspace.py sets both per format.
 DATA_DIR   = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 OUTPUT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
 OUT_TXT    = os.path.join(OUTPUT_DIR, "transcripts", "matchup_matrix.txt")
@@ -103,7 +105,8 @@ def control_comparison(deck_games, matchup_wins):
     out = []
     out.append("\n\n# JESKAI CONTROL vs FOUR-COLOR CONTROL — SIDE-BY-SIDE")
     out.append("# How each control archetype performs into the same opponent set.")
-    out.append("# Note: W-U-B-R Control is merged into Four-Color Control (same archetype, different organizer label).\n")
+    out.append("# Note: W-U-B-R Control is merged into Four-Color Control "
+               "(same archetype, different organizer label).\n")
 
     def decided(a, b):
         return matchup_wins[a].get(b, 0) + matchup_wins[b].get(a, 0)

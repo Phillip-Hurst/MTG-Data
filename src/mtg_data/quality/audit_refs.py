@@ -34,11 +34,9 @@ import os
 import re
 import sys
 
-
-from mtg_data.core.paths import resolve_data_dir
-from mtg_data.core import era as mtg_era
 from mtg_data.classify import refs_store
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from mtg_data.core import era as mtg_era
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir
 from mtg_data.core.stats import normalize
 from mtg_data.ingest import build_card_pool
 from mtg_data.quality import validate_events as ve

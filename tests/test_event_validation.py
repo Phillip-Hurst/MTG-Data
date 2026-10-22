@@ -34,9 +34,10 @@ if "playwright" not in sys.modules:
     sys.modules["playwright"] = pw
     sys.modules["playwright.sync_api"] = sync_api
 
-from mtg_data.ingest import fetch_melee as mtg_fetch
-from mtg_data.core import era as mtg_era
-from mtg_data.quality import validate_events as ve
+# These imports have to follow the playwright stub above.
+from mtg_data.core import era as mtg_era  # noqa: E402
+from mtg_data.ingest import fetch_melee as mtg_fetch  # noqa: E402
+from mtg_data.quality import validate_events as ve  # noqa: E402
 
 
 def api_rows(rows):
@@ -212,7 +213,7 @@ def pairing(p1, p2, url1, url2, winner):
 def build_event(specs, name="Test Event", individual_results=True):
     """specs: list of (player, [cards]). Returns (rows, cache)."""
     cache, rows = {}, []
-    for i, (player, cards) in enumerate(specs):
+    for i, (_player, cards) in enumerate(specs):
         cache[f"url{i}"] = deck(*cards)
     names = [s[0] for s in specs]
     for i in range(0, len(names) - 1, 2):
@@ -298,6 +299,7 @@ def test_rewrite_keeps_only_the_seat_and_drops_quarantined_events(tmp_path):
     could never come back. See tests/test_combine_events.py.
     """
     import csv
+
     from mtg_data.quality import combine_events as ce
 
     def write_event(tid, rows):
@@ -354,6 +356,7 @@ def test_a_second_validation_run_does_not_shrink_the_pool(tmp_path):
     same pool both times.
     """
     import csv
+
     from mtg_data.quality import combine_events as ce
 
     rows = [pairing(f"p{i}", f"q{i}", "a", "b", f"p{i}") for i in range(6)]
@@ -405,6 +408,7 @@ def test_corrections_reach_the_columns_the_matchup_matrix_reads(tmp_path):
     shows up in a matchup check.
     """
     import csv
+
     from mtg_data.classify import apply_corrections as ac
     from mtg_data.core import stats as mtg_stats
 
@@ -414,7 +418,8 @@ def test_corrections_reach_the_columns_the_matchup_matrix_reads(tmp_path):
               "player2", "player2_deck", "player2_deck_url", "result", "winner"]
     row = dict(zip(fields, ["500001", "Test RCQ", "1", "1",
                             "Alice", "Selesnya Aggro", "url-a",
-                            "Bob", "Izzet", "url-b", "Alice won 2-1-0", "Alice"]))
+                            "Bob", "Izzet", "url-b", "Alice won 2-1-0", "Alice"],
+                   strict=True))
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()

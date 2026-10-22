@@ -14,10 +14,9 @@ import sys
 
 import pytest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 from mtg_data.classify import deck_labels
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PLACEHOLDER_REF = {
     "Placeholder Aggro": {

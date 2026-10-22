@@ -9,7 +9,6 @@ Run:  pytest          (from the skill folder)
 """
 from mtg_data.ingest import build_mtgtop8_baseline as b
 
-
 # A trimmed but faithful mtgo decklist export (single-slash DFC, Sideboard split).
 DECKLIST = """\
 4 Opt

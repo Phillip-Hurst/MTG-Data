@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-from mtg_data.cli import main  # noqa: E402  (src/ has to be on the path first)
+from mtg_data.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())

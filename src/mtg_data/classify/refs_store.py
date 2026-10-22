@@ -116,7 +116,7 @@ def combine(entries, cap=60):
     weights = [max(_infer_decks(e), 1) for e in entries]
     total_w = sum(weights)
     acc = {}
-    for e, w in zip(entries, weights):
+    for e, w in zip(entries, weights, strict=True):
         for card, n in e["mainboard"].items():
             acc[card] = acc.get(card, 0.0) + n * w
     ranked = sorted(acc.items(), key=lambda kv: (-kv[1], kv[0]))
@@ -182,9 +182,7 @@ def eligible(deck_mainboard, entry):
     if req and not any(deck_mainboard.get(card, 0) > 0 for card in req):
         return False
     exc = entry.get("excludes") or []
-    if exc and any(deck_mainboard.get(card, 0) > 0 for card in exc):
-        return False
-    return True
+    return not (exc and any(deck_mainboard.get(card, 0) > 0 for card in exc))
 
 
 def discriminators(decks_a, decks_b, min_share=0.55, max_other=0.08, limit=8):

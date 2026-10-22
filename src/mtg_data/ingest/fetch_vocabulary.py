@@ -44,8 +44,8 @@ import re
 import sys
 import urllib.request
 from datetime import date
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
 
+from mtg_data.core.paths import CONFIG_DIR
 
 DATA_DIR = os.environ.get("MTG_DATA_DIR", CONFIG_DIR)
 VOCAB_FILE = os.path.join(DATA_DIR, "archetype_vocabulary.json")
@@ -113,7 +113,8 @@ def main():
     args = p.parse_args()
 
     if args.from_file:
-        html = open(args.from_file, encoding="utf-8", errors="replace").read()
+        with open(args.from_file, encoding="utf-8", errors="replace") as fh:
+            html = fh.read()
     else:
         try:
             html = fetch(args.format)

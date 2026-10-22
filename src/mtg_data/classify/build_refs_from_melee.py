@@ -40,16 +40,15 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
-from mtg_data.classify import refs_store
-from mtg_data.classify import classifier
+from mtg_data.classify import classifier, refs_store
 from mtg_data.core import era as _era
 from mtg_data.core.paths import ROOT_DIR
 from mtg_data.core.stats import normalize as _alias
 from mtg_data.ingest import build_card_pool
 from mtg_data.quality import validate_events as ve
 
-# Data is read from MTG_DATA_DIR (defaults to the script folder so the flat
-# single-format workflow is unchanged). setup.py sets it per format.
+# Data is read from MTG_DATA_DIR (defaults to the checkout root, the flat
+# single-format workflow). setup_workspace.py sets it per format.
 DATA_DIR     = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 # Mislabeled-decks report written next to the data by default.
 # Set MTG_OUTPUT_DIR to write it elsewhere (e.g. your vault project folder).
@@ -227,14 +226,14 @@ def scrape_decklist(page, url):
     try:
         page.goto(url, wait_until="domcontentloaded", timeout=30000)
     except PWTimeout:
-        print(f"      Timeout loading page")
+        print("      Timeout loading page")
         return None
 
     try:
         page.wait_for_selector(".decklist-record", timeout=15000, state="attached")
     except PWTimeout:
         # Page loaded but no card records — deck may be private or deleted
-        print(f"      No .decklist-record found — deck may be private/deleted")
+        print("      No .decklist-record found — deck may be private/deleted")
         return None
 
     cards = page.evaluate(_PARSE_JS)
@@ -259,12 +258,13 @@ def scrape_new_urls(to_scrape, cache):
     # Lazy import so --rebuild-only and --help work without Playwright installed.
     global sync_playwright, PWTimeout
     try:
-        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+        from playwright.sync_api import TimeoutError as PWTimeout
+        from playwright.sync_api import sync_playwright
     except ImportError:
         sys.exit("Playwright is required to scrape melee.gg. Install it with:\n"
                  "    pip install playwright\n"
                  "    playwright install chromium\n"
-                 "Or run setup.py, which offers to install it for you.")
+                 "Or run setup_workspace.py, which offers to install it for you.")
 
     print(f"\nScraping {len(to_scrape)} new deck URLs from melee.gg...")
     UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -392,7 +392,7 @@ def build_refs_from_cache(cache, min_decks, fmt="Standard"):
 
     arch_decks = {}
     dropped = 0
-    for url, data in cache.items():
+    for data in cache.values():
         if data.get("failed") or not data.get("mainboard"):
             continue
         if not deck_belongs(data.get("mainboard"), pool, banned):
@@ -485,7 +485,6 @@ def detect_mislabels(cache, refs):
             no_ref_archs.add(labeled)
             continue
 
-        labeled_ref = refs[canon].get("mainboard", {})
         labeled_score, labeled_ratio, _ = classifier.score_one(main, refs[canon])
 
         verdict = classifier.classify(main, refs)
@@ -661,7 +660,7 @@ def main():
     url_map = collect_deck_urls()
 
     arch_url_counts = Counter(info["archetype"] for info in url_map.values())
-    print(f"\nTop archetypes by unique deck count:")
+    print("\nTop archetypes by unique deck count:")
     for arch, n in arch_url_counts.most_common(15):
         print(f"  {n:4d}  {arch}")
 

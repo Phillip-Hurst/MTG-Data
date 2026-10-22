@@ -45,7 +45,7 @@ anything:
     2   ran, and found ledger lines it could not use
 
 Neither the ledger nor the profile ships with this plugin, and neither belongs
-in the repo. They are a record of one person's own games. `package.py` drops
+in the repo. They are a record of one person's own games. `build_plugin.py` drops
 `play_log*.jsonl` and root `[C] *.md`, and `.gitignore` covers both.
 """
 import argparse
@@ -54,11 +54,10 @@ import json
 import os
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, date
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
-
+from datetime import date, datetime
 
 from mtg_data.core import paths as mtg_paths
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
 
 LEDGER_NAME = "play_log.jsonl"
 PROFILE_NAME = "[C] Play Profile.md"
@@ -305,7 +304,7 @@ def resolve_dir(fmt):
     """Where the insights notes for this format live.
 
     Same resolution the rest of the plugin uses, so the ledger sorts into the
-    per-format insights folder rather than landing next to the scripts.
+    per-format insights folder rather than landing in the checkout root.
     """
     return mtg_paths.resolve_output_dir(fmt, ROOT_DIR)
 

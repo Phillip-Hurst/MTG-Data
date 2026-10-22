@@ -17,13 +17,10 @@ a note.
 import datetime as dt
 import json
 import os
-import sys
 
 import pytest
 
-
 from mtg_data.quality import validate_events as ve
-
 
 CUTOFF = dt.datetime(2026, 8, 10)
 POOL = {"lightning bolt", "island", "mountain", "opt"}

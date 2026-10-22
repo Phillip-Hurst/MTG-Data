@@ -42,9 +42,7 @@ import json
 import os
 import sys
 
-
-from mtg_data.classify import classifier
-from mtg_data.classify import refs_store
+from mtg_data.classify import classifier, refs_store
 from mtg_data.classify import classify_decks as cd
 from mtg_data.core.paths import ROOT_DIR
 from mtg_data.core.stats import normalize
@@ -74,7 +72,9 @@ def labelled_pools():
         print(f"  (no MTGO data read: {e})")
     if os.path.exists(CACHE_FILE):
         try:
-            for _, data in json.load(open(CACHE_FILE, encoding="utf-8")).items():
+            with open(CACHE_FILE, encoding="utf-8") as fh:
+                cache = json.load(fh)
+            for data in cache.values():
                 if data.get("mainboard") and not data.get("failed"):
                     pools.setdefault(_alias(data["archetype"]), []).append(
                         data["mainboard"])

@@ -7,11 +7,10 @@ changes or an alias starts matching it.
 """
 import json
 import os
-import sys
-
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from mtg_data.review import untapped_log as ul
+
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _card(grp, title, types, *texts):
@@ -134,15 +133,18 @@ def test_a_minimal_log_parses_into_one_game_with_its_hand_and_result():
 
 
 def test_untapped_logs_never_ship_or_commit():
-    import build_plugin as package
     from pathlib import Path
+
+    import build_plugin as package
     assert not package.should_ship(Path("untapped_logs/PLACEHOLDER0000.json"))
     with open(os.path.join(SCRIPT_DIR, ".gitignore"), encoding="utf-8") as fh:
         assert "untapped_logs/" in fh.read().split()
 
 
 def test_outcome_suggestion_reads_missed_drops_and_land_heavy_draws():
-    t = lambda play, hand: {"lands_in_play": play, "lands_in_hand": hand}
+    def t(play, hand):
+        return {"lands_in_play": play, "lands_in_hand": hand}
+
     screwed = {"my_turns": [t(0, 1), t(1, 1), t(2, 0), t(2, 0)], "draws": []}
     assert ul.suggest_outcome(screwed, CARDS) == "screwed"
     # Short a land but holding one is a choice, not a screw.

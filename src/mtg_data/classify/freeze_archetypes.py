@@ -29,15 +29,11 @@ doesn't earn a banner. Decks that run a banned card only through another
 archetype's shell won't be caught by that test — that's what --also is for.
 """
 import argparse
-import json
 import os
 import re
 import sys
-from datetime import datetime
-
 
 from mtg_data.core import era as mtg_era
-from mtg_data.core.paths import ROOT_DIR
 
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -96,7 +92,7 @@ def build_banner(hits, ban, date_str, extra_reason=None):
                  "registered as written, and the matchup numbers describe a field that "
                  "no longer exists. Read it as history.")
     if ban.get("url"):
-        lines.append(f">")
+        lines.append(">")
         lines.append(f"> Announcement: {ban['url']}")
     return "\n".join(lines)
 

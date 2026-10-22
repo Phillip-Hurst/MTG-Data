@@ -39,7 +39,6 @@ import shutil
 import sys
 from datetime import datetime
 
-
 from mtg_data.core import era as mtg_era
 from mtg_data.core.paths import ROOT_DIR
 
@@ -219,7 +218,7 @@ def main():
 
     print(f"\nMoved {moved} file(s) into archive/{era_slug}/")
     print(f"Wrote archive/{era_slug}/manifest.json")
-    print(f"\nThe data folder is now empty of scraped results. Next:")
+    print("\nThe data folder is now empty of scraped results. Next:")
     print(f"  python mtg.py fetch-melee        # scrape the {current['label']} era from scratch")
 
 

@@ -35,6 +35,7 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta
+
 from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
 
 DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
@@ -55,7 +56,7 @@ DATE_PATTERNS = [
 
 
 def find_config(name):
-    """Data folder first, then the shipped copy next to the scripts.
+    """Data folder first, then the versioned copy in config/.
 
     Same precedence the other scripts use, so a format that carries its own
     set_releases.json can carry its own bans.json too."""

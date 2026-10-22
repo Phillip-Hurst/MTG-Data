@@ -16,9 +16,6 @@ None of the three raised anything. That is the point of this file.
 import json
 import os
 import re
-import sys
-
-import pytest
 
 
 def test_local_scrape_backups_never_ship():
@@ -28,8 +25,8 @@ def test_local_scrape_backups_never_ship():
     backups of local MTGO and melee scrapes were going into the public
     bundle, 2.7 MB of one person's data.
     """
-    import sys
     from pathlib import Path
+
     import build_plugin as package
 
     for name in ("melee_deck_cache.json.bak", "mtgo_classifications.json.bak",
@@ -43,8 +40,8 @@ def test_local_scrape_backups_never_ship():
 
 
 def test_the_modules_every_consumer_imports_do_ship():
-    import sys
     from pathlib import Path
+
     import build_plugin as package
 
     for name in ("src/mtg_data/quality/combine_events.py",
@@ -221,8 +218,9 @@ def test_package_ships_the_manifest_skills_and_the_name_manifest():
     called SKILL.md was dropped: every archetype note, and the manifest with
     them. The bundle still built and still installed. It was just wrong.
     """
-    import build_plugin as package
     from pathlib import Path
+
+    import build_plugin as package
 
     must_ship = [
         ".claude-plugin/plugin.json",
@@ -248,8 +246,9 @@ def test_package_ships_the_manifest_skills_and_the_name_manifest():
 
 
 def test_package_excludes_data_logs_tests_and_vault_notes():
-    import build_plugin as package
     from pathlib import Path
+
+    import build_plugin as package
 
     must_not_ship = [
         "melee_standard_all_pairings.csv",
@@ -293,8 +292,9 @@ def test_package_required_set_covers_the_archetype_names():
     label resolves onto, so a bundle without it installs and then merges
     nothing. The build has to fail instead.
     """
-    import build_plugin as package
     from pathlib import Path
+
+    import build_plugin as package
 
     assert "archetype names" in package.REQUIRED
     match = package.REQUIRED["archetype names"]
@@ -316,8 +316,9 @@ def test_archetype_working_notes_stay_out_of_the_bundle():
     The notes are one person's metagame reading. An end user needs the names,
     not the notes, and the repo is public.
     """
-    import build_plugin as package
     from pathlib import Path
+
+    import build_plugin as package
 
     note = Path("skills/mtg-tournament-analysis/reference/archetypes/"
                 "[C] Izzet Prowess.md")

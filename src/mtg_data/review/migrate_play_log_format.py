@@ -36,9 +36,8 @@ import os
 import shutil
 import sys
 
-
+from mtg_data.core.paths import CONFIG_DIR
 from mtg_data.review import play_profile
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
 
 BACKUP_SUFFIX = ".pre-format.jsonl"
 

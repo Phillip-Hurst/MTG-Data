@@ -44,12 +44,10 @@ import sys
 from collections import Counter
 from datetime import date
 
-
-from mtg_data.classify import classifier
-from mtg_data.classify import refs_store
+from mtg_data.classify import classifier, refs_store
 from mtg_data.classify import classify_decks as cd
-from mtg_data.ingest import fetch_vocabulary
 from mtg_data.core.paths import ROOT_DIR
+from mtg_data.ingest import fetch_vocabulary
 
 DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 OUT_DIR = os.environ.get("MTG_OUTPUT_DIR", DATA_DIR)
@@ -285,7 +283,7 @@ def write_note(shells, cache, run_date, min_decks):
         lines.append("")
         if sugg:
             lines.append("Candidates, best first:")
-            for arch, score, why in sugg:
+            for arch, _score, why in sugg:
                 lines.append(f"  - **{arch}** — {why}")
         else:
             lines.append("Nothing in the published vocabulary or the melee cache "
@@ -343,7 +341,8 @@ def read_names(paths):
     out = []
     for path in paths:
         try:
-            text = open(path, encoding="utf-8").read()
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
         except OSError:
             continue
         for block in text.split("\n## Shell ")[1:]:
@@ -442,7 +441,8 @@ def main():
     cache = {}
     if os.path.exists(CACHE_FILE):
         try:
-            cache = json.load(open(CACHE_FILE, encoding="utf-8"))
+            with open(CACHE_FILE, encoding="utf-8") as fh:
+                cache = json.load(fh)
         except (OSError, ValueError):
             pass
 

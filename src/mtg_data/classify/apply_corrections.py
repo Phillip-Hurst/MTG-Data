@@ -38,9 +38,7 @@ import re
 import sys
 from datetime import date
 
-
-from mtg_data.core.paths import resolve_data_dir, resolve_output_dir
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir, resolve_output_dir
 
 OVERRIDES_NAME = "archetype_overrides.json"
 RESOLVED_DIRNAME = "Mislabel Review Resolved"
@@ -133,7 +131,7 @@ def candidate_note_dirs(fmt, explicit=None):
     This is deliberately generous. Run-MtgScrapes.ps1 sets MTG_OUTPUT_DIR to
     the project folder, so a scheduled run writes the notes there. A person
     running this script by hand has no such env var, and with no
-    mtg_workspace.json on disk mtg_paths falls back to the script folder —
+    mtg_workspace.json on disk mtg_paths falls back to the checkout root —
     where there are no notes. That combination made this script print
     "Read 0 review note(s)" and exit 0, which is the same silent no-op that
     let a contaminated pool reach a snapshot for 17 days.
@@ -436,7 +434,7 @@ def main():
             print("No overrides on file.")
             return 0
         print(f"{len(overrides)} override(s) in {overrides_path(data_dir)}\n")
-        for url, rec in sorted(overrides.items(), key=lambda kv: kv[1].get("decided", "")):
+        for _url, rec in sorted(overrides.items(), key=lambda kv: kv[1].get("decided", "")):
             print(f"  {rec['archetype']:28s}  was {str(rec.get('was')):28s}  {rec.get('decided','?')}")
             print(f"    {rec.get('player','?')} — {rec.get('tournament','?')}")
         return 0

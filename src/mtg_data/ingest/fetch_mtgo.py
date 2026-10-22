@@ -29,20 +29,26 @@ Usage:
 Deps: playwright (already installed for melee_scraper)
 """
 
-import json, csv, os, re, sys, argparse
+import argparse
+import csv
+import json
+import os
+import re
+import sys
 from datetime import datetime, timedelta
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
-from mtg_data.core.paths import resolve_data_dir, resolve_output_dir
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from playwright.sync_api import TimeoutError as PWTimeout
+from playwright.sync_api import sync_playwright
+
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir, resolve_output_dir
 
 # Scheduled-task console is cp1252; unicode in prints can crash it.
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-# Data written to MTG_DATA_DIR (defaults to the script folder so the flat
-# single-format workflow is unchanged). setup.py sets it per format.
+# Data written to MTG_DATA_DIR (defaults to the checkout root, the flat
+# single-format workflow). setup_workspace.py sets it per format.
 DATA_DIR     = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 # Config is read from the data folder first, then the shipped copy.
 CONFIG_PATH  = (os.path.join(DATA_DIR, "mtg_config.json")
@@ -693,11 +699,11 @@ def generate_vault_note(all_events, new_decks, run_date):
 
     entry_lines = [
         f"\n## {run_date.strftime('%Y-%m-%d %H:%M')}",
-        f"",
+        "",
         f"- Events processed: {len(all_events)}",
         f"- New deck entries: {len(new_decks)}",
-        f"",
-        f"### Archetypes seen:",
+        "",
+        "### Archetypes seen:",
     ]
     for arch, count in top_archetypes:
         entry_lines.append(f"- {arch}: {count}")

@@ -24,16 +24,13 @@ Sauna".
 import argparse
 import json
 import os
-import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-
-from mtg_data.core.paths import resolve_data_dir
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir
 
 SCRYFALL_SEARCH = "https://api.scryfall.com/cards/search"
 USER_AGENT = "mtg-tournament-analysis/1.6 (github.com/Phillip-Hurst/MTG-Data)"
@@ -150,7 +147,7 @@ def fetch_pool(fmt):
             data = _get_json(url)
         except urllib.error.HTTPError as e:
             if e.code == 404 and pages == 0:
-                raise SystemExit(f"Scryfall knows no cards for '{query}'. Check the format name.")
+                raise SystemExit(f"Scryfall knows no cards for '{query}'. Check the format name.") from e
             raise
         pages += 1
         for card in data.get("data", []):

@@ -30,6 +30,7 @@ import re
 import sys
 import urllib.parse
 import urllib.request
+
 from mtg_data.core.paths import ROOT_DIR
 
 RULES_PAGE = "https://magic.wizards.com/en/rules"
@@ -108,7 +109,7 @@ def download(force: bool = False) -> str:
             print(f"! using the cached copy, {age:.0f} days old, "
                   f"version {cached_version()}.", file=sys.stderr)
             return open(CACHE, encoding="utf-8").read()
-        raise SystemExit(f"No cached rules and could not reach {RULES_PAGE}: {exc}")
+        raise SystemExit(f"No cached rules and could not reach {RULES_PAGE}: {exc}") from exc
 
     version = os.path.basename(urllib.parse.unquote(urllib.parse.urlsplit(url).path))
     if not force and version == cached_version() and os.path.exists(CACHE):
@@ -140,7 +141,7 @@ def show_rule(text: str, number: str) -> int:
     """Print a rule and everything nested beneath it."""
     number = number.rstrip(".")
     rules = rule_lines(text)
-    hits = [(n, l) for n, l in rules
+    hits = [(n, line) for n, line in rules
             if n == number or n.startswith(number + ".") or
             (re.fullmatch(r"\d+\.\d+", number) and re.fullmatch(
                 re.escape(number) + r"[a-z]", n))]

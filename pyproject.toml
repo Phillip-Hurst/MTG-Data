@@ -39,7 +39,7 @@ markers = [
 
 [tool.ruff]
 target-version = "py310"
-line-length = 110
+line-length = 120
 extend-exclude = ["archive", "transcripts"]
 
 [tool.ruff.lint]
@@ -53,6 +53,11 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "mtg.py" = ["E402"]
 "scripts/setup_workspace.py" = ["E402"]
+"tests/*" = ["SIM115"]
+# Report builders: each long line is one sentence of the generated note, kept whole
+# so the prose can be read and edited as written.
+"src/mtg_data/analyze/update_archetypes.py" = ["E501"]
+"src/mtg_data/analyze/winrate_analysis.py" = ["E501"]  # fixtures are read inline; the files are tiny and short-lived
 
 [tool.ruff.lint.isort]
 known-first-party = ["mtg_data"]

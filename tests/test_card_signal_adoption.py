@@ -11,13 +11,12 @@ reporting half and pin the boundary: `cards` and `counts` stay mainboard, so the
 lenses that predate this behave exactly as they did.
 """
 import os
-import sys
 
 import pytest
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 from mtg_data.analyze import card_signal as cs
+
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def deck(week_date, main=None, side=None, player="p", archetype="Placeholder A",

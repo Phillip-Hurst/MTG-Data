@@ -18,13 +18,15 @@ classifier verdicts. Both are now handled upstream.
 """
 
 import argparse
-import csv, os, glob, collections, sys
+import collections
+import os
+import sys
 from datetime import datetime
 
-from mtg_data.quality import combine_events
 from mtg_data.classify import deck_labels
-from mtg_data.core.stats import classify_row, win_pct
 from mtg_data.core.paths import ROOT_DIR
+from mtg_data.core.stats import classify_row, win_pct
+from mtg_data.quality import combine_events
 
 # Windows consoles default to cp1252 and choke on box-drawing and accented
 # characters in deck names. Force UTF-8 where the stream supports it.
@@ -34,9 +36,9 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-# Data (the scraped CSVs) is read from MTG_DATA_DIR; defaults to the script
-# folder so the flat single-format workflow keeps working unchanged. setup.py
-# points this at a per-format folder so formats don't cross-contaminate.
+# Data (the scraped CSVs) is read from MTG_DATA_DIR; defaults to the checkout
+# root, the flat single-format workflow. setup_workspace.py points this at a
+# per-format folder so formats don't cross-contaminate.
 DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 # Win-rate report written next to the data by default.
 # Set MTG_OUTPUT_DIR to write it elsewhere (e.g. your vault project folder).

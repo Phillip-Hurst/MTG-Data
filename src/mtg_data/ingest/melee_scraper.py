@@ -19,7 +19,20 @@ Output (every file tagged with the format slug, e.g. "standard"):
     melee_{fmt}_all_standings.csv   — combined across all tournaments
 """
 
-import csv, sys, time, re, json, argparse, os, glob
+import argparse
+import csv
+import glob
+import json
+import os
+import re
+import sys
+import time
+
+from playwright.sync_api import TimeoutError as PWTimeout
+from playwright.sync_api import sync_playwright
+
+from mtg_data.core.paths import ROOT_DIR, resolve_data_dir, resolve_output_dir
+from mtg_data.quality import combine_events
 
 # Windows consoles default to cp1252 and choke on the ✓/✗/→ and accented
 # characters printed below. Force UTF-8 where the stream supports it. This runs
@@ -31,11 +44,6 @@ for _stream in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass
 
-from mtg_data.core.paths import resolve_data_dir, resolve_output_dir
-from mtg_data.quality import combine_events
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-from mtg_data.core.paths import ROOT_DIR
-
 # ── config ─────────────────────────────────────────────────────────────────────
 
 # Format this run is scraping (fetch_melee.py passes MTG_FORMAT via subprocess
@@ -45,7 +53,7 @@ _MTG_FORMAT  = os.environ.get("MTG_FORMAT", "Standard").strip() or "Standard"
 _FMT_SLUG    = _MTG_FORMAT.lower()
 # Where scraped CSVs are read and written: MTG_DATA_DIR if set (the generated
 # scrape.bat does this), else the per-format folder from mtg_workspace.json if
-# setup.py built one, else the script folder. So a by-hand run still sorts into
+# setup_workspace.py built one, else the checkout root. So a by-hand run still sorts into
 # the right format folder.
 DATA_DIR     = resolve_data_dir(_MTG_FORMAT, ROOT_DIR)
 # Project folder (where [C] *.md notes live), resolved the same way.
@@ -420,8 +428,8 @@ def scrape_tournament(page, tid, debug=False, dump=False):
         try:
             click_tab(page, tab)
             print("✓", end=" ", flush=True)
-        except Exception as e:
-            print(f"✗", end=" ", flush=True)
+        except Exception:
+            print("✗", end=" ", flush=True)
     print()
 
     if dump:
@@ -602,7 +610,7 @@ def update_standings_only_bucket():
         "",
         "Auto-maintained by melee_scraper.py on every run. An event drops off "
         "this list automatically if it later gains decklists. If we want the "
-        f"archetypes, the lists have to come from another source.",
+        "archetypes, the lists have to come from another source.",
         "",
         f"## Worth chasing ({MELEE_MIN_PLAYERS}+ players)",
         "",
@@ -672,7 +680,7 @@ def main():
                 write_csv(s, os.path.join(DATA_DIR, f"melee_{_FMT_SLUG}_{tid}_standings.csv"), STANDING_FIELDS)
             except BaseException as e:
                 print(f"  ! Error scraping tournament {tid}: {type(e).__name__}: {e}")
-                print(f"    Skipping to next tournament — data already on disk is kept.")
+                print("    Skipping to next tournament — data already on disk is kept.")
                 # If the page/browser died, stand up a fresh one so the rest of
                 # the queue isn't lost to one bad event.
                 try:
@@ -699,7 +707,7 @@ def main():
     # Every format tags its combined files, so two formats never collide even in
     # a shared folder. (Standard used to keep un-prefixed names; that shared
     # filename was the cross-contamination path, and it's gone.)
-    print(f"\nRebuilding combined CSVs from per-tournament files on disk...")
+    print("\nRebuilding combined CSVs from per-tournament files on disk...")
     # combine_events globs per format, so one format's per-event files can never
     # be folded into another's combined CSV even when the two share a folder.
     # It also applies the quarantine's verdicts, so a fresh scrape can't put a
@@ -708,7 +716,7 @@ def main():
     print(f"  Pool coverage: {os.path.basename(summaries['coverage'])}")
 
     # Refresh the standings-only bucket from disk truth (deck-less events).
-    print(f"\nUpdating standings-only bucket...")
+    print("\nUpdating standings-only bucket...")
     update_standings_only_bucket()
 
     print(f"\nDone — this run added {len(all_pairings)} pairing rows, {len(all_standings)} standing rows")

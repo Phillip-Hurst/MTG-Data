@@ -26,25 +26,23 @@ Modes:
 """
 
 import argparse
-import csv
 import json
 import os
 import re
 import sys
 from collections import Counter
-from datetime import date, datetime
+from datetime import date
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
-from mtg_data.classify import refs_store
-from mtg_data.classify import classifier
+from mtg_data.classify import classifier, refs_store
 from mtg_data.core.paths import ROOT_DIR
 
-# Data is read from MTG_DATA_DIR (defaults to the script folder so the flat
-# single-format workflow is unchanged). setup.py sets it per format.
+# Data is read from MTG_DATA_DIR (defaults to the checkout root, the flat
+# single-format workflow). setup_workspace.py sets it per format.
 DATA_DIR     = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 # Review queue written next to the data by default.
 # Set MTG_OUTPUT_DIR to write it elsewhere (e.g. your vault project folder).
@@ -247,7 +245,8 @@ def _previous_first_seen(path):
     if not os.path.exists(path):
         return {}
     try:
-        text = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
     except OSError:
         return {}
     seen = {}
@@ -536,7 +535,7 @@ def analyze_5_0(events, classifications, archetype_filter=None):
         # Outliers: >= 2 lists, absent from mode
         outliers = [(card, cd) for card, cd in agg if cd["lists"] >= 2 and card not in mode]
         if outliers:
-            print(f"\nOutliers (>=2 lists, not in mode build) -- tech / meta reads:")
+            print("\nOutliers (>=2 lists, not in mode build) -- tech / meta reads:")
             for card, cd in outliers:
                 avg = sum(cd["counts"]) / len(cd["counts"])
                 print(f"  {cd['lists']:2d}/{n} lists  avg {avg:.1f}x  {card}")
@@ -713,7 +712,7 @@ def run_classify(events, refs, classifications, rerun=False):
                     ],
                 })
 
-    print(f"\nClassification summary:")
+    print("\nClassification summary:")
     print(f"  Auto-classified (confident) : {new_confident}")
     print(f"  Sent to review queue        : {len(to_review)}")
     if new_no_refs:
@@ -754,7 +753,6 @@ def apply_reviews(review_path, refs, classifications):
             # Mark in classifications as skipped, don't build refs
             classifications[r["uid"]] = {"archetype": "SKIP", "status": "skipped"}
             continue
-        is_new = arch.upper().startswith("NEW:")
         arch_clean = re.sub(r'^NEW:\s*', '', arch, flags=re.IGNORECASE).strip()
         arch_decks.setdefault(arch_clean, []).append(r)
 

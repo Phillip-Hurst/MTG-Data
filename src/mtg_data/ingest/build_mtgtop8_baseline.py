@@ -20,7 +20,7 @@ mtgtop8 and writes:
       the date it was pulled. The cross-reference point for "what's winning"
       before the user has scraped anything themselves.
 
-It's meant to run once per format at setup time (setup.py calls it), and can
+It's meant to run once per format at setup time (setup_workspace.py calls it), and can
 be re-run any time to refresh the baseline from the current mtgtop8 metagame.
 
 Design notes
@@ -54,15 +54,8 @@ import time
 import urllib.request
 from datetime import date
 
-# Windows consoles default to cp1252 and choke on accented card/player names.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
-
-
 from mtg_data.classify import refs_store
+
 # The one modal-aggregation and DFC normalization, shared with classify_decks
 # so reference keys never diverge between builders.
 from mtg_data.classify.classify_decks import build_ref_from_decks
@@ -71,11 +64,17 @@ from mtg_data.core.paths import ROOT_DIR
 from mtg_data.ingest import build_card_pool
 from mtg_data.quality import validate_events as ve
 
+# Windows consoles default to cp1252 and choke on accented card/player names.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
 DATA_DIR = os.environ.get("MTG_DATA_DIR", ROOT_DIR)
 
 
-
-# MTG format name -> mtgtop8 format code. Matches setup.py's KNOWN_FORMATS.
+# MTG format name -> mtgtop8 format code. Matches setup_workspace.py's KNOWN_FORMATS.
 FORMAT_CODES = {
     "Standard": "ST",
     "Modern": "MO",
@@ -126,10 +125,6 @@ def parse_metagame(html):
     # Tokenize archetype links and percentages in document order.
     # mtgtop8 uses unquoted href attributes (href=archetype?a=...>), so
     # no closing " before >.
-    link_re = re.compile(
-        r'archetype\?a=(\d+)&(?:amp;)?meta=(\d+)&(?:amp;)?f=(\w+)[^>]*>([^<]+)</a>',
-        re.I,
-    )
     # Percentage pattern requires at least one space before % so CSS values
     # like width:48% are not mistaken for archetype share values (which mtgtop8
     # renders as "20 %" with a space).

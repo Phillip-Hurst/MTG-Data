@@ -12,15 +12,13 @@ format; a habit does not.
 """
 import json
 import os
-import sys
 
 import pytest
 
-SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-from mtg_data.review import play_profile as pp
 from mtg_data.review import migrate_play_log_format as mig
+from mtg_data.review import play_profile as pp
 
+SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ── inferring the format ──────────────────────────────────────────────────────
 

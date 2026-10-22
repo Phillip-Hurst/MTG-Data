@@ -73,8 +73,8 @@ import os
 import shutil
 import sys
 from datetime import datetime
-from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir
 
+from mtg_data.core.paths import CONFIG_DIR, ROOT_DIR, resolve_data_dir
 
 # Verdicts that take an event out of the pool. Everything else is kept:
 # "ok" passes both tests, "unverified" has too few cached decklists to judge
@@ -419,7 +419,7 @@ def load_pool(data_dir, fmt, kind, refresh=True, resolve_names=False):
         with open(path, newline="", encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
     except OSError as e:
-        raise SystemExit(f"Could not read the {kind} pool at {path}: {e}")
+        raise SystemExit(f"Could not read the {kind} pool at {path}: {e}") from e
     if summary is not None:
         # What the caller actually got. After a refusal that's the file already
         # on disk, which is a different pool from the one the rebuild would

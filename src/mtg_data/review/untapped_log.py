@@ -55,6 +55,7 @@ import urllib.error
 import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
+
 from mtg_data.core.paths import ROOT_DIR
 
 DEFAULT_DIR = os.path.join(ROOT_DIR, "untapped_logs")
@@ -513,7 +514,7 @@ def summarise(doc, cards, index_row=None):
 
 def render_txt(short_id, summary, games):
     lines = ["# %s vs %s" % (short_id, summary["opponent"])]
-    for s, g in zip(summary["games"], games):
+    for s, g in zip(summary["games"], games, strict=False):
         lines.append("\n## Game %s: %s (%s) | %s | turns %s | mulligans %s" % (
             s["game"], s["result"], s["reason"],
             {True: "play", False: "draw", None: "?"}[s["on_the_play"]],
@@ -587,7 +588,7 @@ def cmd_fetch(args):
         try:
             data = _get("%s/upload-log/%s" % (API, sid))
             json.loads(data)                       # refuse to save a non-log
-        except Exception as e:                     # noqa: BLE001 - reported below
+        except Exception as e:
             failed.append((sid, str(e)))
             continue
         with open(path, "wb") as fh:
