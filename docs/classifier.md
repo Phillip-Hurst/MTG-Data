@@ -32,8 +32,9 @@ Two card-level rules sit on top, because slot overlap can't see a colour or a
 combo piece. A reference can **require** cards (a deck with none of them is
 ineligible) or **exclude** them. Four-Color Control requires Inevitable Defeat,
 which is what keeps three-colour Jeskai lists out of it. A reference can also
-carry **signature** cards that settle a photo finish, worth 0.04 of coverage:
-enough to break a tie, never enough to overturn a clear winner.
+carry **signature** cards. When candidates finish within the margin and exactly
+one of them has a signature card in the deck, that one wins. A signature never
+overturns a candidate that was already ahead on coverage.
 
 Code: `src/mtg_data/classify/classifier.py`. The bars are constants at the top.
 
@@ -83,7 +84,8 @@ Measured on 2026-09-07 against 795 MTGO decks:
 agreement was measured on, and the 481 "existing labels" were the pipeline's own
 earlier output. There's no held-out set of independently labelled
 decks. So the number shows the new rule reproduces the old labels with fewer
-coin-flips; it doesn't show the labels are right.
+coin-flips. Whether those labels were right is a separate question, and only a
+held-out set can answer it.
 
 ## Where it goes wrong
 

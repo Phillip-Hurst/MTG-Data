@@ -163,7 +163,7 @@ So if a user asks for a matchup matrix and there's no local data, don't fake it.
 
 A fresh install isn't empty. `scripts/setup_workspace.py` step 6 seeds `archetype_refs.json` and an mtgtop8 meta-share snapshot per format. Read the snapshot at `baselines/meta_baseline_mtgtop8_<format>.json` for the starting archetype list and share, and label it as an mtgtop8 baseline with its fetch date, not as the user's own scraped data.
 
-Local data lives wherever `scripts/setup_workspace.py` put it — read `mtg_workspace.json` at the workspace root for the per-format `scrapes` and `insights` paths. If the user hasn't run setup, the scripts fall back to reading and writing next to themselves.
+Local data lives wherever `scripts/setup_workspace.py` put it — read `mtg_workspace.json` at the workspace root for the per-format `scrapes` and `insights` paths. If the user hasn't run setup, commands fall back to the checkout root of the clone they run from. See Running a command, above.
 
 ---
 

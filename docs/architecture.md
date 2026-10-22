@@ -6,6 +6,9 @@ those steps writes a file the next one reads. This page is the map.
 
 ## The pipeline
 
+This is the meta side. The review side, for one player's own games, is described
+below the diagram.
+
 ```mermaid
 flowchart TD
     subgraph sources ["Sources"]
@@ -114,8 +117,8 @@ and a rebuild of the same input is byte-identical.
 definitions of it. Three more wrote the archetype references and were wrong in
 opposite directions: two replaced the whole file and dropped any reference the run
 couldn't rebuild, and one only ever added, so a 3-deck seed outranked a 40-deck
-rebuild forever. Each file now has one module that writes it, and a test fails if
-another module opens it for writing.
+rebuild forever. Each file now has one module that writes it. For the references, a
+test fails if any other module writes the file.
 
 **Nothing is deleted.** Quarantined events are renamed, archived eras are moved,
 and replaced references are backed up first. A wrong verdict can be reversed.

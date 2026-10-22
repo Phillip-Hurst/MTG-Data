@@ -2,15 +2,16 @@
 
 ## 2.0.0 - 2026-10-21
 
-The layout changes, so every command does too. The numbers don't: 22 commands
-were run before and after on the same copy of real data, and they exit the same
-way, write the same files and print the same output apart from the command
-hints.
+The layout changes, so every command does too. The restructure on its own
+changed no numbers: 22 offline command runs, before and after it, on the same
+copy of real data, exited the same way, wrote the same files and printed the
+same output apart from the command hints. The fixes below then change what
+they say they change.
 
 ### One package, one entry point
 
-The forty scripts at the repo root are now `src/mtg_data/`, in one subpackage
-per pipeline stage: `ingest`, `quality`, `classify`, `analyze`, `review`, and
+The 33 scripts at the repo root are now `src/mtg_data/`, in one subpackage per
+pipeline stage: `ingest`, `quality`, `classify`, `analyze`, `review`, and
 `core` for paths, eras and the counting rules. Every step runs through one
 command:
 
@@ -36,7 +37,8 @@ redundant prefix:
 
 **Workspaces made by an older setup need their scrape scripts regenerated.**
 Re-run `python scripts/setup_workspace.py`; it keeps your config and rewrites
-`scrape.bat` / `scrape.sh` to call `mtg.py`.
+`scrape.bat` / `scrape.sh` to call `mtg.py`. **Scheduled tasks that call the old
+script paths stop working** and need the same change.
 
 ### Config has its own folder
 
@@ -46,19 +48,56 @@ Re-run `python scripts/setup_workspace.py`; it keeps your config and rewrites
 Scraped data still lands in the checkout root in the flat workflow, so an
 existing setup finds its data where it left it.
 
-### Fixed
+### Fixed: the quality gates
 
 - `validate-events` printed "All events passed" and exited 0 when some event
-  files couldn't be read. A variable recording that was set and never used. It
-  now exits 1 and says how many events went unjudged, so `fetch-melee` stops
-  instead of carrying an unverified pool forward.
-- `cluster-shells` printed a different Core line for the same data on every run:
-  ties broke on set iteration order. Found by running the whole pipeline twice
-  under different hash seeds; every output now matches.
+  files couldn't be read; a variable recording that was set and never used.
+  With a quarantine in the same run it exited 2, which `fetch-melee` treats as
+  normal. Unreadable now exits 1 either way, so `fetch-melee` stops.
+- With no card pool cached, validation said it had fallen back to the ban test
+  and then never ran it: every deck went to `unknown`. Twenty decks running a
+  banned card came back unverified and the run passed. The ban test runs now.
 - `build-refs-from-melee` and `build-mtgtop8-baseline` wrapped their era-guard
   imports in `except Exception` and, if anything failed, built references with
-  no format or ban filter and said nothing. The imports are plain imports now,
-  and a failure in the guard itself prints a warning.
+  no format or ban filter and said nothing. Plain imports now, and a failure in
+  the guard itself prints a warning.
+
+### Fixed: reproducibility
+
+- Four commands ordered ties by set iteration, so the same data printed a
+  different ranking on each run: `cluster-shells`, `winrate-analysis`,
+  `update-archetypes` and `card-signal`. Ties break on the name now.
+  `scripts/check_determinism.py` runs 22 offline commands twice under
+  different hash seeds and compares exit codes, output and written files.
+
+### Fixed: a new user's first hour
+
+Walked end to end from a clean clone: setup with scripted answers, the
+generated scrape script, then each skill's first commands from inside the
+workspace.
+
+- Ten modules, `winrate-analysis` and `matchup-matrix` among them, skipped the
+  workspace manifest and looked for data in the checkout. Run by hand from a
+  workspace, `winrate-analysis` found nothing while `card-signal` found the
+  data. Every module resolves its folders through `core/paths` now.
+- Setup copied `set_releases.json` into each format's folder, and the copy
+  replaced the shipped list. A workspace set up in August never heard about a
+  September set, so its era never moved. Setup stops copying, and the era reads
+  the shipped list plus anything a data folder adds.
+- Setup never built the card pool, so a first scrape was validated on bans
+  alone. It builds it now, before the mtgtop8 seed.
+- A browser that wouldn't start ended in forty lines of Playwright internals.
+  It now says what to install.
+- Arena logs from `untapped-log` were written beside the code, which for an
+  installed plugin is a folder every update replaces. They go with the scraped
+  data.
+- Each skill now says which `mtg.py` to run and from where.
+- Every command writes UTF-8 to the console, so a Windows pipe can't crash on a
+  card name, and refuses to run without `config/` instead of falling back to a
+  rolling window.
+
+### Fixed: smaller things
+
 - Import shims that fell back to a pasted copy of another module's code
   ("MUST stay byte-for-byte equivalent") are gone.
 - `winrate-analysis`, `matchup-matrix` and `update-archetypes` ran in full when
@@ -70,27 +109,30 @@ existing setup finds its data where it left it.
 - `requirements.txt` was matched by the `*.txt` rule in `.gitignore`, so the
   file the README told you to install from was never in the repo.
   `pyproject.toml` now carries the dependencies.
+- A hint told users to run `fetch_mtgo.py --debug-cards`; that flag belongs to
+  `classify-decks`.
 
 ### Added
 
-- **A 95% range on every win rate.** The win-rate tracker prints a Wilson score
-  interval beside each deck and each head-to-head pairing. Ten decided games at
-  60% runs from 31% to 83%, which is the honest answer for most matchup cells in
-  one format era.
+- **A 95% range on win rates.** The win-rate tracker, the archetype notes and
+  the meta snapshot's tier list print a Wilson score interval beside each win
+  rate. Ten decided games at 60% runs from 31% to 83%, which is the honest
+  answer for most matchup cells in one format era.
 - `pyproject.toml`, a ruff rule set the tree passes, and GitHub Actions running
   lint and the suite on Ubuntu (Python 3.10, 3.13) and Windows (3.13).
-- `tests/test_cli.py`: every command imports, every module with a `main()` is
-  reachable from the CLI, the pipeline's own subprocesses resolve without an
-  install, and one version number is written everywhere.
-- `scripts/build_plugin.py` builds the bundle from an allow-list. The deny-list
-  it replaced leaked every new kind of local file until somebody named it.
-- `tests/test_quality_gates.py`: variant-format quarantine, the unreadable-file
-  exit, and all three of `build-baseline`'s refusals had no test until now.
+- `tests/test_cli.py` and `tests/test_quality_gates.py`: every command imports,
+  every module with a `main()` is reachable from the CLI, the pipeline's own
+  subprocesses resolve without an install, one version number everywhere, a
+  workspace is found from inside it, and every gate above has a test.
+- `scripts/build_plugin.py` builds the bundle from an allow-list, and ships
+  `docs/`. The deny-list it replaced leaked every new kind of local file until
+  somebody named it.
 - `docs/`: [architecture](docs/architecture.md), [data quality](docs/data-quality.md)
   with each rule traced to its code and tests, [the classifier](docs/classifier.md)
-  and what its accuracy figure does and doesn't show,
+  and what its accuracy figure can and can't show,
   [scope and limitations](docs/limitations.md), and the
-  [user guide](docs/user-guide.md) that used to be the README.
+  [user guide](docs/user-guide.md) that used to be the README. The README now
+  covers `vod-review` and a new user's first steps.
 
 ## 1.21.0 - 2026-10-17
 

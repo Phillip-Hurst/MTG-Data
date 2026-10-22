@@ -891,7 +891,7 @@ def main():
     )
     if vres.returncode == 2:
         print("\nSome events were quarantined. The combined CSVs have been "
-              "rewritten without them; originals are in *.raw.csv.")
+              "rewritten without them; their files are kept as *.quarantined.csv.")
     elif vres.returncode not in (0, 2):
         print("\nValidation could not run. Treat the combined CSVs as unverified "
               "until it does.")

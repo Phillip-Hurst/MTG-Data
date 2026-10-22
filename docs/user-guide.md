@@ -17,7 +17,7 @@ Two steps. Step 1 gives Claude the skills. Step 2 builds the place the data live
 
 ### 2. Run setup (required)
 
-Clone the repo, or use the copy the plugin installed, and run:
+Clone the repo and run setup from the clone. The plugin's own copy is replaced on every update, so your data can't live there:
 
 ```
 python scripts/setup_workspace.py       # Windows, or double-click scripts\setup.bat
@@ -115,7 +115,7 @@ python mtg.py fetch-mtgo --format Modern
 
 Three things run automatically after a scrape. Each exists because the alternative failed quietly.
 
-**`validate-events`** judges every event by its decklists rather than by its name or its metadata. Verdicts are `off-format`, `pre-era`, `variant`, `seat`, `unverified` or `ok`. Anything that fails is quarantined out of the combined CSVs and renamed out of the per-event glob, with `*.raw.csv` kept alongside.
+**`validate-events`** judges every event by its decklists. An event's name or metadata can add a reason to quarantine it, never a reason to keep it. Verdicts are `off-format`, `pre-era`, `variant`, `seat`, `unverified` or `ok`. Anything that fails is quarantined out of the combined CSVs and its per-event files are renamed to `*.quarantined.csv`; the previous combined files are kept as `*.pre-rebuild.csv`.
 
 That guard is not hypothetical. In August 2026, 1,316 of 1,708 pairing rows in a Standard pool didn't belong: a pre-ban paper event, an entirely Modern team-trios event, and an Artisan side event whose every card is Standard-legal. Card legality is necessary and not sufficient. Every script exited 0, and a published note reported a banned deck at 6.8% of a "post-ban" metagame 17 days after the ban.
 
@@ -203,7 +203,7 @@ What the counting buys you:
 
 `kind` comes from a fixed vocabulary of ten decision types, for the same reason archetype names do: free text splits one habit spelled three ways into three habits. A line using anything else is rejected and reported rather than counted under a name nothing else uses, and the exit code says so (`0` clean, `1` couldn't run, `2` found lines it couldn't use).
 
-**Your ledger and your profile stay on your machine.** They're a record of your own games. `.gitignore` and `scripts/build_plugin.py` both exclude them, and a test fails if that ever stops being true. The schema and the vocabularies are in [`skills/vod-review/reference/play-profile.md`](skills/vod-review/reference/play-profile.md).
+**Your ledger and your profile stay on your machine.** They're a record of your own games. `.gitignore` and `scripts/build_plugin.py` both exclude them, and a test fails if that ever stops being true. The schema and the vocabularies are in [`skills/vod-review/reference/play-profile.md`](../skills/vod-review/reference/play-profile.md).
 
 ## Rules lookups
 
