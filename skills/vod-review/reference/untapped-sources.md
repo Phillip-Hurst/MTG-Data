@@ -11,7 +11,7 @@ read. The log holds strictly more information in one call.
 | **The index** | `api.mtga.untapped.gg/api/v1/games/users/<userId>/players/<playerTag>/?card_set=<CODE>` | Which matches exist, results, durations, mulligan counts, the bottomed card |
 | **The log** | `api.mtga.untapped.gg/api/v1/upload-log/<shortId>` | Every finding. Plays, mana payments, revealed hands, decklists, sideboard swaps |
 
-**`untapped_log.py` fetches both directly**, with a backoff on 429. On 2026-10-17
+**`untapped-log` fetches both directly**, with a backoff on 429. On 2026-10-17
 the sandbox reached both endpoints with plain HTTP and neither needed a sign-in, so
 that is the first path. The browser recipe below is the fallback for a day the sandbox
 can't get through: fetch from the page context of any `mtga.untapped.gg` page, whose

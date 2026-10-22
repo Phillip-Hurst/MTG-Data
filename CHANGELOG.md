@@ -84,6 +84,13 @@ existing setup finds its data where it left it.
   install, and one version number is written everywhere.
 - `scripts/build_plugin.py` builds the bundle from an allow-list. The deny-list
   it replaced leaked every new kind of local file until somebody named it.
+- `tests/test_quality_gates.py`: variant-format quarantine, the unreadable-file
+  exit, and all three of `build-baseline`'s refusals had no test until now.
+- `docs/`: [architecture](docs/architecture.md), [data quality](docs/data-quality.md)
+  with each rule traced to its code and tests, [the classifier](docs/classifier.md)
+  and what its accuracy figure does and doesn't show,
+  [scope and limitations](docs/limitations.md), and the
+  [user guide](docs/user-guide.md) that used to be the README.
 
 ## 1.21.0 - 2026-10-17
 

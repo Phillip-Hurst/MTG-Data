@@ -50,7 +50,7 @@ is worse than a short one: it reads as authoritative and isn't. Where a card has
 been verified, say so in the note rather than guessing.
 
 A new archetype earns a note when it's a real deck rather than a spread of brews.
-`card_signal.py --lens unnamed` finds the candidates: a group sharing a core, with a
+`card-signal --lens unnamed` finds the candidates: a group sharing a core, with a
 pilot count and a finishing record.
 
 ## Two kinds of section, and the precedence between them
@@ -74,6 +74,6 @@ card was blank — and nothing more.
 
 ## These notes stay local
 
-`.gitignore` keeps `[C] *.md` in this folder out of the repo, and `package.py` keeps
+`.gitignore` keeps `[C] *.md` in this folder out of the repo, and `scripts/build_plugin.py` keeps
 them out of the bundle. They're your working notes about your metagame. Nothing here
 needs to travel.

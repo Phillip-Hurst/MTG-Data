@@ -37,7 +37,7 @@ python mtg.py play-profile --min-occurrences 4 --min-sessions 3   # a stricter b
 ```
 
 **Neither the ledger nor the profile notes ship, and neither belongs in the
-repo.** They are the user's own play data. `package.py` drops them from a bundle
+repo.** They are the user's own play data. `scripts/build_plugin.py` drops them from a bundle
 and `.gitignore` covers both, with a test pinning it. `config/play_patterns.json` is
 different: it is a vocabulary of how Magic decisions go wrong, true regardless of
 who was holding the cards, and it ships.
@@ -337,7 +337,7 @@ keeps. The slots:
 | `other` | Mana rocks and anything that is none of the above |
 
 A card that does two jobs goes where the deck uses it. Deceit in a deck that
-casts it for the bounce and the discard is interaction. `untapped_log.py`
+casts it for the bounce and the discard is interaction. `untapped-log`
 suggests a split from card types and rules text; the reviewer checks it and owns
 the count.
 
@@ -471,7 +471,7 @@ one game. The review names which of those it used.
 
 ## Rolling the ledger into the profile
 
-`play_profile.py` applies everything in this section. The rules are written out
+`play-profile` applies everything in this section. The rules are written out
 here because they're the ones a reader needs in order to argue with a number, and
 a test fails if the two drift apart.
 

@@ -9,7 +9,7 @@ description: Analyze Magic: The Gathering Standard tournament results from melee
 
 | Skill | What it's for | Hand off when |
 |---|---|---|
-| `deck-check` | Assigns the right archetype to mislabeled or uncategorized decks, and pushes that label into the win-rate and matchup data | A deck is under the wrong name, an unnamed shell from `card_signal.py` needs naming, or the user wants to clear the mislabel queue |
+| `deck-check` | Assigns the right archetype to mislabeled or uncategorized decks, and pushes that label into the win-rate and matchup data | A deck is under the wrong name, an unnamed shell from `python mtg.py card-signal` needs naming, or the user wants to clear the mislabel queue |
 | `vod-review` | Reviews the user's own games from an untapped.gg match log, a YouTube VOD, or a pasted log, and finds the decisions that decided them | The question moves from "what's good" to "how did I play it". Field data says a deck wins 55%; only a review says why this pilot didn't |
 | `rules-check` | Quotes the Comprehensive Rules. Priority, the stack, triggers, state-based actions, layers | An interaction needs a ruling. Never resolve one from memory inside an analysis write-up |
 
@@ -31,13 +31,13 @@ the disagreement is worth a sentence, not an edit.
 
 **Check the pool before quoting a number.** `event_quarantine_<fmt>.json` must
 exist, match the current era, and postdate the last scrape. If it doesn't, say so
-and point at `validate_events.py` rather than reporting the number as fact. On
+and point at `validate-events` rather than reporting the number as fact. On
 2026-08-27 an unvalidated pool produced a snapshot reporting Izzet Prowess at 6.8%
 of a "post-ban" metagame, 17 days after it was banned out of the format. Nothing
 errored.
 
 **Then read `melee_<fmt>_all_coverage.json`, which says what the pool actually
-is.** `combine_events.py` writes it beside the combined CSVs: events kept, events
+is.** `combine-events` writes it beside the combined CSVs: events kept, events
 quarantined, events carrying no verdict, and files that could not be read. Report
 the event count from there rather than from the number of CSVs in the folder.
 An event with no verdict is in the pool and unjudged, and that is worth a
@@ -53,7 +53,7 @@ place and lost rows on every run.
 
 ## Card-level signal
 
-Step 3.5 below covers how to *write* about a card once you've found it. `card_signal.py` is how you find it. Run it before writing the "Cards to watch" section — that section should come out of this, not out of impressions.
+Step 3.5 below covers how to *write* about a card once you've found it. `card-signal` is how you find it. Run it before writing the "Cards to watch" section — that section should come out of this, not out of impressions.
 
 ```bash
 python mtg.py card-signal                       # all five lenses, current era
@@ -110,9 +110,9 @@ A ban is the more dangerous of the two, because nothing about the data looks dif
 python mtg.py era
 ```
 
-It prints the current era, the date it started, why it started there, and what the previous era was. The window start comes from whichever is later: the newest set release in `config/set_releases.json`, or the newest B&R announcement for this format in `config/bans.json`. `fetch_melee.py` and `build_baseline.py` both anchor on it.
+It prints the current era, the date it started, why it started there, and what the previous era was. The window start comes from whichever is later: the newest set release in `config/set_releases.json`, or the newest B&R announcement for this format in `config/bans.json`. `fetch-melee` and `build-baseline` both anchor on it.
 
-**Don't take the era from this file; run `era.py`.** As of 2026-10-17 the Standard era is Reality Fracture, from its Arena release on 2026-09-29, and the 2026-10-12 B&R made no Standard change. The last Standard bans were 2026-08-10: Badgermole Cub, Stormchaser's Talent and Gran-Gran (Selesnya Offense, Izzet Prowess and Jeskai Lessons lost a card). This line went stale once already: it named the post-ban era for a week after Reality Fracture had replaced it. When a set lands, add it to `config/set_releases.json` and refresh the card pool (`build_card_pool.py --max-age-days 0`) the same day, or `validate_events.py` quarantines the new set's events as off-format.
+**Don't take the era from this file; run `era`.** As of 2026-10-17 the Standard era is Reality Fracture, from its Arena release on 2026-09-29, and the 2026-10-12 B&R made no Standard change. The last Standard bans were 2026-08-10: Badgermole Cub, Stormchaser's Talent and Gran-Gran (Selesnya Offense, Izzet Prowess and Jeskai Lessons lost a card). This line went stale once already: it named the post-ban era for a week after Reality Fracture had replaced it. When a set lands, add it to `config/set_releases.json` and refresh the card pool (`build-card-pool --max-age-days 0`) the same day, or `validate-events` quarantines the new set's events as off-format.
 
 ### When a ban lands
 
@@ -135,19 +135,19 @@ Until there are enough post-ban events to stand on their own, lean on three thin
 
 ## This is a local-first tool: where the data comes from
 
-The cleanest, most complete data comes from the local scrapers running on the user's own machine. `setup.py` sets that up, and `scrape.bat` / `scrape.sh` pull melee + MTGO into a per-format folder. Cowork reads what they produce. Prefer local data whenever it's present and fresh.
+The cleanest, most complete data comes from the local scrapers running on the user's own machine. `scripts/setup_workspace.py` sets that up, and `scrape.bat` / `scrape.sh` pull melee + MTGO into a per-format folder. Cowork reads what they produce. Prefer local data whenever it's present and fresh.
 
 What you can fetch live in a Cowork session, with no local data:
 
-- **mtgtop8 (reliable, server-rendered).** Fetch `https://www.mtgtop8.com/format?f=ST` for archetype meta share and the "decks to beat," then `https://www.mtgtop8.com/archetype?a=ID&f=ST` and `https://www.mtgtop8.com/mtgo?d=DECKID` for representative lists. This is the cold-start engine, and the source `setup.py` seeds the baseline from. mtgtop8 files several builds under one umbrella ("Izzet Control"); the deck-level label ("Izzet Lesson", "Izzet Spellementals") is the granularity that matches the archetype files, so read the deck labels, not just the umbrella.
-- **MTGO and magic.gg are JavaScript-rendered.** A plain fetch of an mtgo.com decklist or a magic.gg results page returns a loading shell, not the cards. Don't present that shell as data. Card-level MTGO data comes from the local `fetch_mtgo.py` scrape. If you must read one of these pages live, use the browser tools that render JavaScript (Claude in Chrome), not a plain fetch.
+- **mtgtop8 (reliable, server-rendered).** Fetch `https://www.mtgtop8.com/format?f=ST` for archetype meta share and the "decks to beat," then `https://www.mtgtop8.com/archetype?a=ID&f=ST` and `https://www.mtgtop8.com/mtgo?d=DECKID` for representative lists. This is the cold-start engine, and the source `scripts/setup_workspace.py` seeds the baseline from. mtgtop8 files several builds under one umbrella ("Izzet Control"); the deck-level label ("Izzet Lesson", "Izzet Spellementals") is the granularity that matches the archetype files, so read the deck labels, not just the umbrella.
+- **MTGO and magic.gg are JavaScript-rendered.** A plain fetch of an mtgo.com decklist or a magic.gg results page returns a loading shell, not the cards. Don't present that shell as data. Card-level MTGO data comes from the local `fetch-mtgo` scrape. If you must read one of these pages live, use the browser tools that render JavaScript (Claude in Chrome), not a plain fetch.
 - **melee.gg** round data (the matchup matrix and head-to-head win rates) is JavaScript-rendered and the API is OAuth-gated. It comes only from the local melee scrape.
 
-So if a user asks for a matchup matrix and there's no local data, don't fake it. Say matchup data comes from a local melee scrape, point them at `setup.py` (it builds the folders and a one-click `scrape.bat` / `scrape.sh`), and meanwhile give the live read from mtgtop8. A partial but accurate answer beats a dead end.
+So if a user asks for a matchup matrix and there's no local data, don't fake it. Say matchup data comes from a local melee scrape, point them at `scripts/setup_workspace.py` (it builds the folders and a one-click `scrape.bat` / `scrape.sh`), and meanwhile give the live read from mtgtop8. A partial but accurate answer beats a dead end.
 
-A fresh install isn't empty. `setup.py` step 6 seeds `archetype_refs.json` and an mtgtop8 meta-share snapshot per format. Read the snapshot at `baselines/meta_baseline_mtgtop8_<format>.json` for the starting archetype list and share, and label it as an mtgtop8 baseline with its fetch date, not as the user's own scraped data.
+A fresh install isn't empty. `scripts/setup_workspace.py` step 6 seeds `archetype_refs.json` and an mtgtop8 meta-share snapshot per format. Read the snapshot at `baselines/meta_baseline_mtgtop8_<format>.json` for the starting archetype list and share, and label it as an mtgtop8 baseline with its fetch date, not as the user's own scraped data.
 
-Local data lives wherever `setup.py` put it — read `mtg_workspace.json` at the workspace root for the per-format `scrapes` and `insights` paths. If the user hasn't run setup, the scripts fall back to reading and writing next to themselves.
+Local data lives wherever `scripts/setup_workspace.py` put it — read `mtg_workspace.json` at the workspace root for the per-format `scrapes` and `insights` paths. If the user hasn't run setup, the scripts fall back to reading and writing next to themselves.
 
 ---
 
@@ -198,16 +198,16 @@ If you can't reach Scryfall for any reason, say: "I haven't verified [card] this
 
 ## Step 1: Gather tournament results — last 4 weeks
 
-Read local scrape output first — that's the primary data source. The Playwright scrapers (`fetch_melee.py` for melee, `fetch_mtgo.py` for MTGO) run on the user's machine and produce the CSV and JSON files this analysis works from. Cowork reads what they produce; it does not pull melee or MTGO data live.
+Read local scrape output first — that's the primary data source. The Playwright scrapers (`fetch-melee` for melee, `fetch-mtgo` for MTGO) run on the user's machine and produce the CSV and JSON files this analysis works from. Cowork reads what they produce; it does not pull melee or MTGO data live.
 
 What you can supplement with a live fetch in a Cowork session: mtgtop8 (server-rendered) and magic.gg Metagame Mentor articles. Everything else needs the local scrapers to have run first.
 
 ### Sources
 
-**melee.gg** — Primary source for decklists and round-by-round matchup records. **Requires the local Playwright scraper.** melee.gg is JavaScript-rendered and OAuth-gated; a plain fetch returns a shell. All melee data comes from `fetch_melee.py` (discovery + scheduling) and `melee_scraper.py` (per-tournament round data), which drive a real browser on the user's machine. The output lands in the format's `scrapes/` folder as `melee_<format>_all_pairings.csv` and `melee_<format>_all_standings.csv`.
+**melee.gg** — Primary source for decklists and round-by-round matchup records. **Requires the local Playwright scraper.** melee.gg is JavaScript-rendered and OAuth-gated; a plain fetch returns a shell. All melee data comes from `fetch-melee` (discovery + scheduling) and `melee-scraper` (per-tournament round data), which drive a real browser on the user's machine. The output lands in the format's `scrapes/` folder as `melee_<format>_all_pairings.csv` and `melee_<format>_all_standings.csv`.
 - Individual decklists at `https://melee.gg/Decklist/View/{uuid}` render as static HTML and can be fetched live if you have a specific UUID.
 
-**MTGO** — Two types of data, both from the local `fetch_mtgo.py` scraper. MTGO decklist pages are JavaScript-rendered; a plain fetch returns a loading shell, not cards. **Requires the local Playwright scraper.**
+**MTGO** — Two types of data, both from the local `fetch-mtgo` scraper. MTGO decklist pages are JavaScript-rendered; a plain fetch returns a loading shell, not cards. **Requires the local Playwright scraper.**
 
 *Challenges* — Competitive weekend events. Standard runs a Challenge 32 (32-player cap) and Challenge 64 (64-player cap) most weekends. Full Top 32 decklists and standings land in the local scrape output.
 - URL pattern (for reference only — not live-fetchable): `https://www.mtgo.com/decklist/standard-challenge-64-YYYY-MM-DD`
@@ -215,7 +215,7 @@ What you can supplement with a live fetch in a Cowork session: mtgtop8 (server-r
 *5-0 League dumps* — Published weekly. Every decklist that went 5-0 in a Standard league gets posted. No matchup data, no standings — just lists. Use these to catch brewing happening outside the Challenge field: new archetypes, fringe cards, singleton tech showing up across multiple pilots.
 - URL pattern (for reference only): `https://www.mtgo.com/decklist/standard-league-YYYY-MM-DD`
 
-**mtgtop8.com** — Aggregated results across many events. **Server-rendered — can be fetched live.** Use for archetype meta share, the "decks to beat," and representative decklists. This is the cold-start engine and what `setup.py` seeds the archetype baseline from.
+**mtgtop8.com** — Aggregated results across many events. **Server-rendered — can be fetched live.** Use for archetype meta share, the "decks to beat," and representative decklists. This is the cold-start engine and what `scripts/setup_workspace.py` seeds the archetype baseline from.
 - Standard: `https://www.mtgtop8.com/format?f=ST`
 
 **magic.gg** — Official competitive results. Pro Tours, Regional Championships, sanctioned Organized Play. **Metagame Mentor articles can be fetched live.** Event results pages are JavaScript-rendered.
@@ -293,11 +293,11 @@ Filter out small locals and casual store events (fewer than ~30 players). MTGO l
 
 The analysis uses three windows.
 
-- **Recent window**: the last 2–3 weeks of current-era events. Run `fetch_melee.py --since YYYY-MM-DD` where the date is 2–3 weeks ago. This is the live meta — what's winning right now.
-- **Current era window**: everything from the era start to today. Run `fetch_melee.py` without flags. This is the full picture of how the meta developed since the last reset, whether that reset was a set release or a ban.
+- **Recent window**: the last 2–3 weeks of current-era events. Run `fetch-melee --since YYYY-MM-DD` where the date is 2–3 weeks ago. This is the live meta — what's winning right now.
+- **Current era window**: everything from the era start to today. Run `fetch-melee` without flags. This is the full picture of how the meta developed since the last reset, whether that reset was a set release or a ban.
 - **Prior era baseline**: the saved snapshot from the era before (`baselines/meta_baseline_[era_slug].json`, or `archive/through-YYYY-MM-DD/baselines/` once it's been frozen). This is the cross-era reference.
 
-`fetch_melee.py` gets the window start from `era.py`, which takes the later of the newest set release and the newest B&R date for the format. The recent window cutoff is a judgment call — use 2 weeks for an active meta, 3 weeks if events have been thin.
+`fetch-melee` gets the window start from `era`, which takes the later of the newest set release and the newest B&R date for the format. The recent window cutoff is a judgment call — use 2 weeks for an active meta, 3 weeks if events have been thin.
 
 If the era just started (fewer than ~10 events total), don't force a recent-vs-earlier split — there's nothing meaningful to diff yet. Report the full era window only and note the sample size. After a ban this will be the normal state for two or three weeks; say the sample is small rather than dressing it up.
 
@@ -321,7 +321,7 @@ Wait for the user to paste the CSV before proceeding to Step 2. If they paste it
 
 **Staleness check (mandatory before using on-disk data):** check the newest event date in the combined pairings file (`melee_<format>_all_pairings.csv`, e.g. `melee_standard_all_pairings.csv`) and the `date` fields in `mtgo_*_latest.json` before treating them as current. If the newest data is older than the recent window, say so plainly ("local data ends YYYY-MM-DD") and ask the user to run the fetch scripts rather than presenting old data as the live meta. The scheduled scrape can fail silently — file dates are the only honest signal.
 
-**Era check (also mandatory):** run `python mtg.py era` and confirm the data folder holds data from *this* era. Right after a ban the folder is empty by design — `archive_era.py` moved the old files out. An empty data folder means "no post-ban data scraped yet," not "no data exists." Say which of those it is. Do not reach into `archive/` to fill the gap and present it as current.
+**Era check (also mandatory):** run `python mtg.py era` and confirm the data folder holds data from *this* era. Right after a ban the folder is empty by design — `archive-era` moved the old files out. An empty data folder means "no post-ban data scraped yet," not "no data exists." Say which of those it is. Do not reach into `archive/` to fill the gap and present it as current.
 
 ---
 
@@ -341,7 +341,7 @@ melee.gg tournament pages are JavaScript-rendered. Fetching `https://melee.gg/To
 - Swiss standings tables
 - Live bracket/elimination data
 
-### When the user pastes melee_scraper.py output
+### When the user pastes melee-scraper output
 
 The scraper produces two CSVs:
 
@@ -393,7 +393,7 @@ seats that do have a URL are already resolved automatically.
 
 ### Building the matrix
 
-**When the user has a pairings CSV from melee_scraper.py**, render an interactive matchup matrix widget using `show_widget`. The widget loads the CSV client-side (no server needed), computes win rates for every archetype pair, and displays a color-coded heatmap. Use this HTML:
+**When the user has a pairings CSV from melee-scraper**, render an interactive matchup matrix widget using `show_widget`. The widget loads the CSV client-side (no server needed), computes win rates for every archetype pair, and displays a color-coded heatmap. Use this HTML:
 
 - File drop zone using PapaParse (from cdnjs.cloudflare.com)
 - For each row: skip byes (player2 empty), skip forfeits, skip draws
@@ -732,7 +732,7 @@ If a script broke, a site changed its layout, or the analysis missed something r
 **What to include:**
 
 - What you were trying to do
-- Which script failed (`fetch_melee.py`, `fetch_mtgo.py`, `melee_scraper.py`, etc.)
+- Which script failed (`fetch-melee`, `fetch-mtgo`, `melee-scraper`, etc.)
 - The full error message or wrong output (paste it)
 - Your OS and Python version (`python --version`)
 - The date you ran it (site structures change)

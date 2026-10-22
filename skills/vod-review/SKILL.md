@@ -17,7 +17,7 @@ habits show up across sessions instead of dying in one note.
 | Skill | What it's for | Hand off when |
 |---|---|---|
 | `rules-check` | What the Comprehensive Rules say. Priority, the stack, layers, state-based actions, timing | A line's legality or timing is the question, **or a finding rests on when a condition is evaluated.** Never guess at whether a response was possible, or at whether an "if" is an intervening-if; go get the rule and cite its number |
-| `mtg-tournament-analysis` | Meta share, win rates, matchup matrices, card-level signal across the field | The review turns into "is this deck even good" or "what's the field like", or you need the matchup's real win rate to judge how a game *should* have gone. Also where the archetype notes and `card_signal.py` live, which is where the "was this card in the picture?" question in Step 4 gets its card |
+| `mtg-tournament-analysis` | Meta share, win rates, matchup matrices, card-level signal across the field | The review turns into "is this deck even good" or "what's the field like", or you need the matchup's real win rate to judge how a game *should* have gone. Also where the archetype notes and `python mtg.py card-signal` live, which is where the "was this card in the picture?" question in Step 4 gets its card |
 | `deck-check` | Assigns the right archetype name and pushes it into the win-rate data | The opponent's deck needs a name before you can look up the matchup |
 
 `mtg-price-check` prices a Moxfield binder against Face to Face Games. It is a
@@ -83,7 +83,7 @@ five traps, three of which have already put a wrong finding into a shipped revie
 | **The index** | `api.mtga.untapped.gg/api/v1/games/users/<userId>/players/<playerTag>/?card_set=<CODE>` | Enumerating matches, results, durations, mulligan counts |
 | **The log** | `api.mtga.untapped.gg/api/v1/upload-log/<shortId>` | Every finding in the review |
 
-**Start with `untapped_log.py`.** Neither endpoint needs a sign-in (checked
+**Start with `untapped-log`.** Neither endpoint needs a sign-in (checked
 2026-10-17 from a guest session and from the sandbox with plain HTTP), so the script
 pulls and parses without a browser:
 
@@ -184,7 +184,7 @@ Do not guess at a card from a blurry image. Ask, or say which card you couldn't 
 A profile link, a deck link or "review my games from last night" is a batch, not a
 match. The steps are the same; the order and the budget change.
 
-1. **Enumerate and agree the scope first.** List the matches with `untapped_log.py
+1. **Enumerate and agree the scope first.** List the matches with `python mtg.py untapped-log
    matches`, then ask which slice: one session, one deck, the losses, or everything
    constructed since a date. Draft and sealed are out unless asked for.
 2. **Read everything before asking anything.** Parse every match, then do pass one
@@ -304,7 +304,7 @@ plays. Both of those are worth keeping, and they go to different places.
 **Card text, interactions, and play patterns go in the archetype note.** They're facts
 about the format and they're true regardless of who was holding the cards.
 
-**Your record in the matchup goes in the deck profile**, where `play_profile.py`
+**Your record in the matchup goes in the deck profile**, where `play-profile`
 counts it and labels it. Under 20 games it prints as an anecdote, in that word.
 
 **A short personal-experience section in the archetype note is fine, and it is never
@@ -374,7 +374,7 @@ reasons:
 
 **Record what the hand was made of, not just lands and spells.** `composition` puts
 every card in one slot: `lands`, `threats`, `interaction`, `card_advantage`, `other`.
-`untapped_log.py` suggests a split from card types and rules text; check it, because a
+`untapped-log` suggests a split from card types and rules text; check it, because a
 card that does two jobs goes where the deck uses it (Deceit cast for its triggers is
 interaction). The `shape` follows from the composition and the script derives it, so
 leave `shape` out unless the hand had `no-early-play`, the one shape a count can't see.
@@ -441,7 +441,7 @@ Where the card comes from:
 
 - The **Notable cards** and **Key tricks and interactions** tables in the archetype
   note at `skills/mtg-tournament-analysis/reference/archetypes/`.
-- The rogue and deviation lenses of `card_signal.py`, for cards showing up in that
+- The rogue and deviation lenses of `card-signal`, for cards showing up in that
   archetype's current lists without being in the note yet. That's the good version of
   this question: a card the field has started playing and the note hasn't caught up
   to.
@@ -526,7 +526,7 @@ project: MTG Tournament Analysis Skill
 date: YYYY-MM-DD
 tags: [mtg, vod-review, {your-deck-slug}]
 source: {untapped:<shortId> per match | YouTube video ID | pasted log}
-era: {output of era.py}
+era: {output of python mtg.py era}
 ---
 
 # {Your deck} vs {Their deck} — {date}
@@ -617,7 +617,7 @@ read once and changes nothing.
 
 The review is written. Now make it count toward the next one.
 
-**Append to the ledger, then run the script. Don't count by hand.** `play_profile.py`
+**Append to the ledger, then run the script. Don't count by hand.** `play-profile`
 does the arithmetic, applies the bar, and rewrites the profile notes. Counting from
 memory across a dozen review notes is how a habit list turns into a vibe.
 
@@ -780,7 +780,7 @@ trends and strengths at once. When no leak has cleared the bar, the line says so
 names nothing.
 
 **The ledger and the profile notes don't ship and don't go in the repo.** They're the
-user's play history and the repo is public. `package.py` and `.gitignore` both exclude
+user's play history and the repo is public. `scripts/build_plugin.py` and `.gitignore` both exclude
 them, with a test pinning it. `config/play_patterns.json` does ship: it's a vocabulary of how
 Magic decisions go wrong, true regardless of who was holding the cards.
 
